@@ -111,6 +111,28 @@ void main() {
     expect(ascii.decode(document.bytes.take(5).toList()), '%PDF-');
   });
 
+  test('exports supported euro and Vietnamese glyphs', () async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026, 11, 11)),
+    );
+    final party = await service.parties.findOrCreate('€100 deposit');
+    await service.interactions.save(
+      Interaction(
+        id: 'vietnamese',
+        partyId: party.id,
+        summary: 'Tiếng Việt: ạ và ế',
+        timestamp: DateTime.utc(2026, 11, 11),
+        createdAt: DateTime.utc(2026, 11, 11),
+      ),
+    );
+
+    final document = await HistoryExportService(service).exportPdf(party.id);
+
+    expect(ascii.decode(document.bytes.take(5).toList()), '%PDF-');
+  });
+
   testWidgets('explains how to export unsupported PDF text safely', (
     tester,
   ) async {
