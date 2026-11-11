@@ -11,7 +11,7 @@ import '../../domain/models.dart';
 class AppDatabase {
   AppDatabase._(this._database);
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
   final Database _database;
 
   static Future<AppDatabase> open({String? path, bool useFfi = false}) async {
@@ -34,6 +34,7 @@ class AppDatabase {
         onCreate: (db, version) => _createSchema(db),
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) await _addUnicodeSearchColumns(db);
+          if (oldVersion < 3) await _normalizeTimestamps(db);
         },
       ),
     );
@@ -128,11 +129,37 @@ class AppDatabase {
     );
   }
 
-  Future<Party?> partyByName(String name) async {
+  static Future<void> _normalizeTimestamps(Database database) async {
+    for (final entry in {
+      'parties': ['created_at'],
+      'interactions': ['timestamp', 'created_at', 'follow_up_due_at'],
+    }.entries) {
+      for (final row in await database.query(entry.key)) {
+        await database.update(
+          entry.key,
+          {
+            for (final column in entry.value)
+              if (row[column] != null)
+                column: _utc(DateTime.parse(row[column] as String)),
+          },
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+    }
+  }
+
+  Future<Party> findOrCreateParty(Party candidate) => _database.transaction(
+    (transaction) async =>
+        await _partyByName(candidate.name, transaction) ??
+        await _insertParty(candidate, transaction),
+  );
+
+  Future<Party?> _partyByName(String name, DatabaseExecutor executor) async {
     // Version 1's ASCII-only uniqueness allowed distinct Unicode spellings
     // that now fold together. Preserve their IDs and prefer an exact spelling;
     // otherwise select the smallest immutable ID for a stable fallback.
-    final rows = await _database.rawQuery(
+    final rows = await executor.rawQuery(
       '''SELECT * FROM parties
       WHERE name_search = ?
       ORDER BY CASE WHEN name COLLATE BINARY = ? THEN 0 ELSE 1 END, id COLLATE BINARY
@@ -158,22 +185,31 @@ class AppDatabase {
     )).map(_party),
   );
 
-  Future<Party> insertParty(Party party) async {
-    await _database.insert('parties', {
+  Future<Party> _insertParty(Party party, DatabaseExecutor executor) async {
+    await executor.insert('parties', {
       'id': party.id,
       'name': party.name,
       'name_search': party.name.toLowerCase(),
-      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'created_at': _utc(DateTime.now()),
     });
     return party;
   }
 
   Future<Interaction> saveInteraction(Interaction input) async {
-    final existing = await getInteraction(input.id);
-    final item = existing == null
-        ? input
-        : input.copyWith(createdAt: existing.createdAt);
-    await _database.transaction((transaction) async {
+    return _database.transaction((transaction) async {
+      final existing = await transaction.query(
+        'interactions',
+        columns: ['created_at'],
+        where: 'id = ?',
+        whereArgs: [input.id],
+      );
+      final item = existing.isEmpty
+          ? input
+          : input.copyWith(
+              createdAt: DateTime.parse(
+                existing.single['created_at'] as String,
+              ),
+            );
       await transaction.insert('interactions', {
         'id': item.id,
         'party_id': item.partyId,
@@ -202,8 +238,8 @@ class AppDatabase {
           'value_search': reference.toLowerCase(),
         });
       }
+      return item;
     });
-    return item;
   }
 
   Future<Interaction?> getInteraction(InteractionId id) async {
@@ -262,8 +298,22 @@ class AppDatabase {
       JOIN parties p ON p.id = i.party_id LEFT JOIN interaction_references r ON r.interaction_id = i.id
       WHERE i.id IN (SELECT id FROM interaction_search WHERE summary MATCH ?)
       OR i.summary_search LIKE ? ESCAPE '\\' OR p.name_search LIKE ? ESCAPE '\\' OR i.contact_name_search LIKE ? ESCAPE '\\' OR r.value_search LIKE ? ESCAPE '\\'
-      ORDER BY i.timestamp DESC''',
-        [tokens.isEmpty ? '""' : tokens, like, like, like, like],
+      ORDER BY CASE
+        WHEN EXISTS (SELECT 1 FROM interaction_references exact_ref
+          WHERE exact_ref.interaction_id = i.id AND exact_ref.value_search = ?) THEN 0
+        WHEN p.name_search = ? OR i.contact_name_search = ? OR i.summary_search = ? THEN 1
+        ELSE 2 END, i.timestamp DESC, i.id''',
+        [
+          tokens.isEmpty ? '""' : tokens,
+          like,
+          like,
+          like,
+          like,
+          query.trim().toLowerCase(),
+          query.trim().toLowerCase(),
+          query.trim().toLowerCase(),
+          query.trim().toLowerCase(),
+        ],
       ),
     );
   }
@@ -303,6 +353,15 @@ class AppDatabase {
     );
   }
 
-  static String _utc(DateTime value) => value.toUtc().toIso8601String();
+  static String _utc(DateTime value) {
+    final utc = value.toUtc();
+    final iso = utc.toIso8601String();
+    // Dart omits the final three fractional digits when microseconds are zero.
+    // Fixed-width values preserve chronological order in SQLite TEXT indexes.
+    return utc.microsecond == 0
+        ? '${iso.substring(0, iso.length - 1)}000Z'
+        : iso;
+  }
+
   Future<void> close() => _database.close();
 }

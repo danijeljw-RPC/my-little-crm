@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/crm_service.dart';
 
-import 'package:uuid/uuid.dart';
-
 Future<void> editInteraction(
   BuildContext context,
   CrmService service, {
@@ -38,6 +36,7 @@ class InteractionEditor extends StatefulWidget {
 
 class _InteractionEditorState extends State<InteractionEditor> {
   final form = GlobalKey<FormState>();
+  final _partyFocus = FocusNode();
   late final party = TextEditingController(text: widget.partyName);
   late final summary = TextEditingController(text: widget.existing?.summary);
   late final contact = TextEditingController(
@@ -58,6 +57,22 @@ class _InteractionEditorState extends State<InteractionEditor> {
   bool reopeningFollowUp = false;
   bool saving = false;
   String? error;
+  List<Party> _parties = const [];
+  @override
+  void initState() {
+    super.initState();
+    _loadParties();
+  }
+
+  Future<void> _loadParties() async {
+    try {
+      final values = await widget.service.parties.list();
+      if (mounted) setState(() => _parties = values);
+    } catch (_) {
+      // A failed suggestion lookup must not prevent manual entry or saving.
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in [
@@ -69,6 +84,7 @@ class _InteractionEditorState extends State<InteractionEditor> {
     ]) {
       controller.dispose();
     }
+    _partyFocus.dispose();
     super.dispose();
   }
 
@@ -80,50 +96,49 @@ class _InteractionEditorState extends State<InteractionEditor> {
     });
     try {
       final existing = widget.existing;
-      final selectedParty = existing == null
-          ? await widget.service.parties.findOrCreate(party.text.trim())
-          : await widget.service.parties.get(existing.partyId);
-      if (selectedParty == null) throw StateError('Party no longer exists');
-      final base =
-          widget.existing ??
-          Interaction(
-            id: const Uuid().v4(),
-            partyId: selectedParty.id,
-            summary: summary.text.trim(),
+      final followUp = due == null
+          ? null
+          : FollowUp(
+              dueAt: due!.toUtc(),
+              status:
+                  existing?.followUp?.status == FollowUpStatus.completed &&
+                      !reopeningFollowUp
+                  ? FollowUpStatus.completed
+                  : FollowUpStatus.open,
+            );
+      final referenceNumbers = references.text.split(',');
+      if (existing == null) {
+        await widget.service.createInteraction(
+          CreateInteractionCommand(
+            partyName: party.text,
+            summary: summary.text,
             timestamp: timestamp.toUtc(),
-            createdAt: widget.service.clock.now().toUtc(),
-          );
-      await widget.service.interactions.save(
-        Interaction(
-          id: base.id,
-          partyId: base.partyId,
-          summary: summary.text.trim(),
-          timestamp: timestamp.toUtc(),
-          createdAt: base.createdAt,
-          method: method,
-          contactName: contact.text.trim().isEmpty ? null : contact.text.trim(),
-          referenceNumbers: references.text
-              .split(',')
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty)
-              .toSet()
-              .toList(),
-          commitment: commitment.text.trim().isEmpty
-              ? null
-              : commitment.text.trim(),
-          followUp: due == null
-              ? null
-              : FollowUp(
-                  dueAt: due!.toUtc(),
-                  status:
-                      widget.existing?.followUp?.status ==
-                              FollowUpStatus.completed &&
-                          !reopeningFollowUp
-                      ? FollowUpStatus.completed
-                      : FollowUpStatus.open,
-                ),
-        ),
-      );
+            method: method,
+            contactName: contact.text,
+            referenceNumbers: referenceNumbers,
+            commitment: commitment.text,
+            followUpDueAt: followUp?.dueAt,
+          ),
+        );
+      } else {
+        await widget.service.updateInteraction(
+          UpdateInteractionCommand(
+            summary: summary.text,
+            interaction: Interaction(
+              id: existing.id,
+              partyId: existing.partyId,
+              createdAt: existing.createdAt,
+              timestamp: timestamp.toUtc(),
+              summary: summary.text,
+              method: method,
+              contactName: contact.text,
+              referenceNumbers: referenceNumbers,
+              commitment: commitment.text,
+              followUp: followUp,
+            ),
+          ),
+        );
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -160,14 +175,51 @@ class _InteractionEditorState extends State<InteractionEditor> {
               widget.existing == null ? 'New interaction' : 'Edit interaction',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            TextFormField(
-              key: const Key('party-name'),
-              controller: party,
-              readOnly: widget.existing != null,
-              decoration: const InputDecoration(labelText: 'Company or person'),
-              validator: (s) => s == null || s.trim().isEmpty
-                  ? 'Enter a company or person'
-                  : null,
+            RawAutocomplete<Party>(
+              textEditingController: party,
+              focusNode: _partyFocus,
+              displayStringForOption: (value) => value.name,
+              optionsBuilder: (value) =>
+                  widget.existing != null || value.text.trim().isEmpty
+                  ? const Iterable<Party>.empty()
+                  : _parties.where(
+                      (p) => p.name.toLowerCase().contains(
+                        value.text.trim().toLowerCase(),
+                      ),
+                    ),
+              fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+                  TextFormField(
+                    key: const Key('party-name'),
+                    controller: controller,
+                    focusNode: focusNode,
+                    readOnly: widget.existing != null,
+                    decoration: const InputDecoration(
+                      labelText: 'Company or person',
+                    ),
+                    validator: (s) => s == null || s.trim().isEmpty
+                        ? 'Enter a company or person'
+                        : null,
+                  ),
+              optionsViewBuilder: (context, onSelected, options) => Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  child: SizedBox(
+                    width: 300,
+                    height: 160,
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        for (final option in options)
+                          ListTile(
+                            title: Text(option.name),
+                            onTap: () => onSelected(option),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
             TextFormField(
               key: const Key('summary'),
@@ -234,8 +286,10 @@ class _InteractionEditorState extends State<InteractionEditor> {
             ),
             TextButton(
               onPressed: () async {
-                final value = await date(due ?? DateTime.now());
-                if (value != null) {
+                final value = await date(
+                  due ?? widget.service.clock.now().toLocal(),
+                );
+                if (value != null && mounted) {
                   setState(() {
                     due = value;
                     reopeningFollowUp = true;
@@ -256,8 +310,7 @@ class _InteractionEditorState extends State<InteractionEditor> {
                 }),
                 child: const Text('Remove follow-up'),
               ),
-            if (widget.existing?.followUp?.status ==
-                    FollowUpStatus.completed &&
+            if (widget.existing?.followUp?.status == FollowUpStatus.completed &&
                 !reopeningFollowUp)
               const Text(
                 'This follow-up is completed. Choose a date to reopen it.',

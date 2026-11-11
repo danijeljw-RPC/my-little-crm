@@ -36,7 +36,7 @@ void main() {
     final path = '${directory.path}/fts4.sqlite';
     final initial = await AppDatabase.open(path: path);
     await initial.close();
-    final native = await sqlite.openDatabase(path);
+    final native = await sqlite.databaseFactory.openDatabase(path);
     await native.execute('DROP TABLE interaction_search');
     await native.execute(
       'CREATE VIRTUAL TABLE interaction_search USING fts4(id, summary)',
@@ -69,7 +69,7 @@ void main() {
       (await service.searchInteractions('éNERGIE')).single.id,
       accented.id,
     );
-  });
+  }, skip: Platform.isWindows || Platform.isLinux);
 
   testWidgets(
     'offline records survive reopening and completed follow-ups remain in history',

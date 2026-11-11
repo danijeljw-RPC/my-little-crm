@@ -16,6 +16,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Interaction> _results = const [];
   int _generation = 0;
   String _query = '';
+  String? _error;
   @override
   void didUpdateWidget(covariant SearchScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -27,13 +28,23 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _search(String value) async {
     _query = value;
     final generation = ++_generation;
-    final results = value.trim().isEmpty
-        ? <Interaction>[]
-        : await widget.service.searchInteractions(value);
-    if (mounted && generation == _generation) {
-      setState(() {
-        _results = results;
-      });
+    try {
+      final results = value.trim().isEmpty
+          ? <Interaction>[]
+          : await widget.service.searchInteractions(value);
+      if (mounted && generation == _generation) {
+        setState(() {
+          _results = results;
+          _error = null;
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _results = const [];
+          _error = 'Could not search. Please try again.';
+        });
+      }
     }
   }
 
@@ -52,6 +63,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ),
+      if (_error != null) Text(_error!),
       Expanded(
         child: ListView(
           children: [

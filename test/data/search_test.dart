@@ -11,6 +11,92 @@ import 'package:my_little_crm/domain/crm_service.dart';
 import 'package:my_little_crm/core/clock.dart';
 
 void main() {
+  test('ranks exact references before newer incidental text matches', () async {
+    final db = await AppDatabase.inMemory();
+    addTearDown(db.close);
+    final party = await LocalPartyRepository(db).findOrCreate('Party');
+    for (final id in ['exact-old', 'exact-new', 'incidental']) {
+      final time = DateTime.utc(
+        2026,
+        1,
+        id == 'exact-old'
+            ? 1
+            : id == 'exact-new'
+            ? 2
+            : 3,
+      );
+      await db.saveInteraction(
+        Interaction(
+          id: id,
+          partyId: party.id,
+          summary: id == 'incidental'
+              ? 'Discussed CASE-42 briefly'
+              : 'Support call',
+          referenceNumbers: id == 'incidental' ? [] : ['CASE-42'],
+          timestamp: time,
+          createdAt: time,
+        ),
+      );
+    }
+    expect((await db.searchInteractions('CASE-42')).map((i) => i.id), [
+      'exact-new',
+      'exact-old',
+      'incidental',
+    ]);
+  });
+
+  test(
+    'migrates schema 2 timestamps and retains search after restart',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('crm-v2-');
+      addTearDown(() => directory.delete(recursive: true));
+      final path = '${directory.path}/legacy.sqlite';
+      var db = await AppDatabase.open(path: path, useFfi: true);
+      final party = await LocalPartyRepository(db).findOrCreate('Party');
+      for (final offset in [0, 1]) {
+        final time = DateTime.utc(2026).add(Duration(microseconds: offset));
+        await db.saveInteraction(
+          Interaction(
+            id: '$offset',
+            partyId: party.id,
+            summary: 'Premium disputed: CASE-42.',
+            timestamp: time,
+            createdAt: time,
+            followUp: FollowUp(dueAt: time),
+          ),
+        );
+      }
+      await db.close();
+      final legacy = await databaseFactoryFfi.openDatabase(path);
+      await legacy.update(
+        'interactions',
+        {
+          'timestamp': '2026-01-01T00:00:00.000Z',
+          'created_at': '2026-01-01T00:00:00.000Z',
+          'follow_up_due_at': '2026-01-01T00:00:00.000Z',
+        },
+        where: 'id = ?',
+        whereArgs: ['0'],
+      );
+      await legacy.setVersion(2);
+      await legacy.close();
+      db = await AppDatabase.open(path: path, useFfi: true);
+      addTearDown(db.close);
+      expect((await db.interactionsForParty(party.id)).map((i) => i.id), [
+        '1',
+        '0',
+      ]);
+      expect((await db.openFollowUps()).map((i) => i.id), ['0', '1']);
+      expect(await db.searchInteractions('prem disp'), hasLength(2));
+      expect(await db.searchInteractions('CASE-42.'), hasLength(2));
+      expect(await db.searchInteractions('%'), isEmpty);
+      final item = (await db.getInteraction('0'))!;
+      await db.saveInteraction(item.copyWith(summary: 'Resolved'));
+      expect((await db.searchInteractions('prem disp')).single.id, '1');
+      expect((await db.searchInteractions('resolved')).single.id, '0');
+    },
+  );
+
   test(
     'migration preserves histories when Unicode party names fold together',
     () async {

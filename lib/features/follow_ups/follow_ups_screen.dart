@@ -19,12 +19,21 @@ class _FollowUpsScreenState extends State<FollowUpsScreen> {
   }
 
   Future<void> _complete(Interaction item) async {
-    await widget.service.completeFollowUp(item.id);
-    final refreshed = widget.service.outstandingFollowUps();
-    if (mounted) {
-      setState(() {
-        _items = refreshed;
-      });
+    try {
+      await widget.service.completeFollowUp(item.id);
+      if (mounted) {
+        setState(() {
+          _items = widget.service.outstandingFollowUps();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not complete follow-up. Please try again.'),
+          ),
+        );
+      }
     }
   }
 
@@ -32,6 +41,22 @@ class _FollowUpsScreenState extends State<FollowUpsScreen> {
   Widget build(BuildContext context) => FutureBuilder<List<Interaction>>(
     future: _items,
     builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Could not load follow-ups. Please try again.'),
+              TextButton(
+                onPressed: () => setState(() {
+                  _items = widget.service.outstandingFollowUps();
+                }),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        );
+      }
       if (!snapshot.hasData) {
         return const Center(child: CircularProgressIndicator());
       }

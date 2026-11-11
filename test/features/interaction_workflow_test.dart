@@ -9,6 +9,95 @@ import 'package:my_little_crm/domain/repositories.dart';
 
 void main() {
   testWidgets(
+    'failed follow-up completion keeps the item available for retry',
+    (tester) async {
+      final interactions = _FailingSaveRepository();
+      final service = CrmService(
+        parties: MemoryPartyRepository(),
+        interactions: interactions,
+        clock: FixedClock(DateTime.utc(2026)),
+      );
+      await service.createInteraction(
+        CreateInteractionCommand(
+          partyName: 'BrightSure',
+          summary: 'Request quote',
+          followUpDueAt: DateTime.utc(2027),
+        ),
+      );
+      interactions.fail = true;
+      await tester.pumpWidget(MyLittleCrmApp(service: service));
+      await tester.tap(find.text('Follow-ups'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Complete follow-up'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('Could not complete follow-up. Please try again.'),
+        findsOneWidget,
+      );
+      expect(find.text('Request quote'), findsOneWidget);
+      interactions.fail = false;
+      await tester.tap(find.byTooltip('Complete follow-up'));
+      await tester.pumpAndSettle();
+      expect(find.text('No outstanding follow-ups'), findsOneWidget);
+    },
+  );
+  testWidgets('home records open editable history and refresh on return', (
+    tester,
+  ) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026)),
+    );
+    await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'BrightSure',
+        summary: 'Original call',
+      ),
+    );
+    await tester.pumpWidget(MyLittleCrmApp(service: service));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Original call'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Export history'), findsOneWidget);
+    await tester.tap(find.text('Original call'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('summary')), 'Edited call');
+    await tester.ensureVisible(find.text('Save interaction'));
+    await tester.tap(find.text('Save interaction'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Edited call'), findsOneWidget);
+    expect(find.text('Original call'), findsNothing);
+  });
+
+  testWidgets('suggests existing parties while recording a conversation', (
+    tester,
+  ) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026)),
+    );
+    await service.parties.findOrCreate('BrightSure Insurance');
+    await tester.pumpWidget(MyLittleCrmApp(service: service));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add interaction'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('party-name')), 'bright');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BrightSure Insurance'));
+    await tester.enterText(find.byKey(const Key('summary')), 'New call');
+    await tester.ensureVisible(find.text('Save interaction'));
+    await tester.tap(find.text('Save interaction'));
+    await tester.pumpAndSettle();
+    expect((await service.parties.list()).length, 1);
+    expect(find.text('BrightSure Insurance'), findsOneWidget);
+  });
+
+  testWidgets(
     'editing retains the original party ID without creating a name lookup party',
     (tester) async {
       final parties = MemoryPartyRepository();
@@ -211,4 +300,13 @@ void main() {
       expect(find.text('Revised quote promised'), findsNothing);
     },
   );
+}
+
+class _FailingSaveRepository extends MemoryInteractionRepository {
+  bool fail = false;
+  @override
+  Future<Interaction> save(Interaction value) async {
+    if (fail) throw StateError('Disk unavailable');
+    return super.save(value);
+  }
 }
