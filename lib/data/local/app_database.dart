@@ -129,10 +129,15 @@ class AppDatabase {
   }
 
   Future<Party?> partyByName(String name) async {
-    final rows = await _database.query(
-      'parties',
-      where: 'name_search = ?',
-      whereArgs: [name.toLowerCase()],
+    // Version 1's ASCII-only uniqueness allowed distinct Unicode spellings
+    // that now fold together. Preserve their IDs and prefer an exact spelling;
+    // otherwise select the smallest immutable ID for a stable fallback.
+    final rows = await _database.rawQuery(
+      '''SELECT * FROM parties
+      WHERE name_search = ?
+      ORDER BY CASE WHEN name COLLATE BINARY = ? THEN 0 ELSE 1 END, id COLLATE BINARY
+      LIMIT 1''',
+      [name.toLowerCase(), name],
     );
     return rows.isEmpty ? null : _party(rows.single);
   }

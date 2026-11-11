@@ -78,9 +78,11 @@ class _InteractionEditorState extends State<InteractionEditor> {
       error = null;
     });
     try {
-      final selectedParty = await widget.service.parties.findOrCreate(
-        party.text.trim(),
-      );
+      final existing = widget.existing;
+      final selectedParty = existing == null
+          ? await widget.service.parties.findOrCreate(party.text.trim())
+          : await widget.service.parties.get(existing.partyId);
+      if (selectedParty == null) throw StateError('Party no longer exists');
       final base =
           widget.existing ??
           Interaction(

@@ -12,6 +12,72 @@ import 'package:my_little_crm/core/clock.dart';
 
 void main() {
   test(
+    'migration preserves histories when Unicode party names fold together',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('crm-collision-');
+      addTearDown(() => directory.delete(recursive: true));
+      final path = '${directory.path}/legacy.sqlite';
+      sqfliteFfiInit();
+      final legacy = await databaseFactoryFfi.openDatabase(path);
+      await legacy.execute(
+        'CREATE TABLE parties(id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, created_at TEXT)',
+      );
+      await legacy.execute(
+        'CREATE TABLE interactions(id TEXT PRIMARY KEY, party_id TEXT, summary TEXT, timestamp TEXT, created_at TEXT, method TEXT, contact_name TEXT, commitment TEXT, follow_up_due_at TEXT, follow_up_status TEXT)',
+      );
+      await legacy.execute(
+        'CREATE TABLE interaction_references(interaction_id TEXT, value TEXT)',
+      );
+      await legacy.execute(
+        'CREATE VIRTUAL TABLE interaction_search USING fts5(id UNINDEXED, summary)',
+      );
+      for (final entry in {'a': 'Énergie', 'b': 'énergie'}.entries) {
+        await legacy.insert('parties', {
+          'id': entry.key,
+          'name': entry.value,
+          'created_at': '2026-11-11T00:00:00Z',
+        });
+        await legacy.insert('interactions', {
+          'id': 'record-${entry.key}',
+          'party_id': entry.key,
+          'summary': 'Call ${entry.key}',
+          'timestamp': '2026-11-11T00:00:00Z',
+          'created_at': '2026-11-11T00:00:00Z',
+          'method': 'phone',
+        });
+      }
+      await legacy.setVersion(1);
+      await legacy.close();
+      final db = await AppDatabase.open(path: path, useFfi: true);
+      addTearDown(db.close);
+      final parties = LocalPartyRepository(db);
+      expect((await parties.findOrCreate('Énergie')).id, 'a');
+      expect((await parties.findOrCreate('énergie')).id, 'b');
+      expect((await parties.findOrCreate('éNERGIE')).id, 'a');
+      final service = CrmService(
+        parties: parties,
+        interactions: LocalInteractionRepository(db),
+        clock: FixedClock(DateTime.utc(2026, 11, 11)),
+      );
+      final added = await service.createInteraction(
+        const CreateInteractionCommand(
+          partyName: 'énergie',
+          summary: 'New call',
+        ),
+      );
+      expect(added.partyId, 'b');
+      final edited = (await db.getInteraction('record-a'))!
+          .copyWith(summary: 'Edited call');
+      await db.saveInteraction(edited);
+      expect(
+        (await db.interactionsForParty('a')).single.summary,
+        'Edited call',
+      );
+      expect((await db.interactionsForParty('b')).length, 2);
+      expect((await parties.list()).map((p) => p.id), ['a', 'b']);
+    },
+  );
+  test(
     'search folds Unicode party, contact and references in migrated v1 records',
     () async {
       final directory = await Directory.systemTemp.createTemp('crm-unicode-');
