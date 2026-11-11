@@ -7,7 +7,37 @@ import 'package:my_little_crm/domain/models.dart';
 import 'package:my_little_crm/domain/repositories.dart';
 
 void main() {
-  testWidgets('refreshes preserved search after adding a matching record', (tester) async {
+  testWidgets('search failures are recoverable on the next query', (
+    tester,
+  ) async {
+    final interactions = _FailingSearchRepository();
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: interactions,
+      clock: FixedClock(DateTime.utc(2026)),
+    );
+    await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'BrightSure',
+        summary: 'Refund received',
+      ),
+    );
+    await tester.pumpWidget(MyLittleCrmApp(service: service));
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'refund');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Could not search. Please try again.'), findsOneWidget);
+    interactions.fail = false;
+    await tester.enterText(find.byType(TextField), 'received');
+    await tester.pumpAndSettle();
+    expect(find.text('Refund received'), findsOneWidget);
+    expect(find.text('Could not search. Please try again.'), findsNothing);
+  });
+  testWidgets('refreshes preserved search after adding a matching record', (
+    tester,
+  ) async {
     final service = CrmService(
       parties: MemoryPartyRepository(),
       interactions: MemoryInteractionRepository(),
@@ -83,4 +113,13 @@ void main() {
     expect(find.text('BrightSure'), findsNothing);
     expect(find.text('premium'), findsOneWidget);
   });
+}
+
+class _FailingSearchRepository extends MemoryInteractionRepository {
+  bool fail = true;
+  @override
+  Future<List<Interaction>> search(String query) async {
+    if (fail) throw StateError('Disk unavailable');
+    return super.search(query);
+  }
 }

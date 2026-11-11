@@ -62,6 +62,20 @@ class _PartyHistoryScreenState extends State<PartyHistoryScreen> {
     body: FutureBuilder<List<Interaction>>(
       future: service.partyHistory(party.id),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Could not load history. Please try again.'),
+                TextButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

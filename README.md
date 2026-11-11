@@ -50,9 +50,14 @@ provider. Export files contain readable personal records: keep them in a locatio
 you trust. PDF/JSON exports are reports, not an encrypted restorable backup.
 
 Stage 1 does not yet include app-entry PIN/biometrics, encrypted backup/restore,
-recovery kits, notifications, calendar export, attachments, or cloud sync. Device
-security protects the current local database; app-level encryption follows in a
-separate security stage.
+recovery kits, notifications, calendar export, attachments, or cloud sync.
+Android automatic cloud backup and device-transfer extraction of app storage
+are disabled. Other operating-system backup behavior remains controlled by the
+platform and its user settings. Device security protects the current local
+database; app-level encryption follows in a separate security stage.
+
+See [Stage 1 review evidence](docs/delivery/STAGE-1-REVIEW.md) for corrections,
+migration behavior, and remaining platform-acceptance limits.
 
 ## Verification
 
@@ -73,7 +78,7 @@ protection to require both of its checks before merging:
 
 Use an emulator or disposable test device for the integration journey. It creates
 a temporary SQLite database, records three interactions (including one through the editor), searches a partial case
-number, completes a follow-up, reopens the database, and verifies both records
+number, completes a follow-up, reopens the database, and verifies all three records
 remain in the party history. Replace `macos` with an available supported target
 to repeat acceptance there. Platform folders alone do not establish acceptance
 on all five operating systems.

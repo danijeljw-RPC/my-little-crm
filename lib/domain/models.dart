@@ -65,10 +65,20 @@ class CreateInteractionCommand {
     required this.partyName,
     required this.summary,
     this.followUpDueAt,
+    this.timestamp,
+    this.method = CommunicationMethod.phone,
+    this.contactName,
+    this.referenceNumbers = const [],
+    this.commitment,
   });
   final String partyName;
   final String summary;
   final DateTime? followUpDueAt;
+  final DateTime? timestamp;
+  final CommunicationMethod method;
+  final String? contactName;
+  final List<String> referenceNumbers;
+  final String? commitment;
 }
 
 class UpdateInteractionCommand {
