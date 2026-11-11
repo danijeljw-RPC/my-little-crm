@@ -3,7 +3,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="my_little_crm"
+        android:label="My Little CRM"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
