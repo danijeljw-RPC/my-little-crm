@@ -13,6 +13,18 @@ import 'package:my_little_crm/data/local/party_repository.dart';
 import 'package:my_little_crm/domain/crm_service.dart';
 import 'package:my_little_crm/domain/models.dart';
 
+Future<void> pumpUntil(
+  WidgetTester tester,
+  bool Function() condition,
+  String description,
+) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    if (condition()) return;
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  throw TestFailure('Timed out waiting for $description.');
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -101,7 +113,13 @@ void main() {
       );
       await tester.ensureVisible(find.text('Save interaction'));
       await tester.tap(find.text('Save interaction'));
-      await tester.pumpAndSettle();
+      await pumpUntil(
+        tester,
+        () =>
+            find.text('Received the revised quote').evaluate().isNotEmpty &&
+            find.text('New interaction').evaluate().isEmpty,
+        'the editor to close after saving the interaction',
+      );
       await tester.tap(find.text('Follow-ups'));
       await tester.pumpAndSettle();
       expect(find.text('Premium disputed: BS-841902.'), findsOneWidget);
