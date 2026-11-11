@@ -38,6 +38,8 @@ class AppDatabase {
     return rows.isEmpty ? null : _party(rows.single);
   }
 
+  Future<List<Party>> allParties() async => Future.wait((await _database.query('parties', orderBy: 'name COLLATE NOCASE')).map(_party));
+
   Future<Party> insertParty(Party party) async {
     await _database.insert('parties', {'id': party.id, 'name': party.name, 'created_at': DateTime.now().toUtc().toIso8601String()});
     return party;

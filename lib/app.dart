@@ -4,6 +4,8 @@ import 'domain/crm_service.dart';
 import 'domain/models.dart';
 import 'domain/repositories.dart';
 import 'core/clock.dart';
+import 'features/follow_ups/follow_ups_screen.dart';
+import 'features/parties/party_list_screen.dart';
 
 class MyLittleCrmApp extends StatelessWidget {
   const MyLittleCrmApp({super.key, this.service});
@@ -25,6 +27,7 @@ class InteractionHome extends StatefulWidget {
 
 class _InteractionHomeState extends State<InteractionHome> {
   final List<_Entry> _entries = [];
+  var _selectedIndex = 0;
 
   Future<void> _add() async {
     final draft = await showModalBottomSheet<_Draft>(context: context, isScrollControlled: true, builder: (_) => const _EntryForm());
@@ -38,12 +41,17 @@ class _InteractionHomeState extends State<InteractionHome> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('My Little CRM')),
     floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add interaction')),
-    body: _entries.isEmpty
+    body: _selectedIndex == 2 ? PartyListScreen(service: widget.service) : _selectedIndex == 1 ? FollowUpsScreen(service: widget.service) : _entries.isEmpty
         ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.forum_outlined, size: 52), SizedBox(height: 12), Text('Interactions'), SizedBox(height: 6), Text('No interactions yet'), Text('Record a conversation, promise, or follow-up.')]))
         : ListView.separated(padding: const EdgeInsets.all(20), itemCount: _entries.length, separatorBuilder: (context, index) => const SizedBox(height: 10), itemBuilder: (_, index) {
             final entry = _entries[index];
             return Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.forum_outlined)), title: Text(entry.party), subtitle: Text(entry.interaction.summary), trailing: const Text('Today')));
           }),
+    bottomNavigationBar: NavigationBar(selectedIndex: _selectedIndex, onDestinationSelected: (index) => setState(() => _selectedIndex = index), destinations: const [
+      NavigationDestination(icon: Icon(Icons.forum_outlined), label: 'Interactions'),
+      NavigationDestination(icon: Icon(Icons.checklist_outlined), label: 'Follow-ups'),
+      NavigationDestination(icon: Icon(Icons.people_outline), label: 'Parties'),
+    ]),
   );
 }
 

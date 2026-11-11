@@ -13,4 +13,6 @@ class LocalPartyRepository implements PartyRepository {
   }
   @override
   Future<Party?> get(PartyId id) => _database.partyById(id);
+  @override
+  Future<List<Party>> list() => _database.allParties();
 }
