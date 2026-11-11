@@ -6,4 +6,6 @@ class CrmService { const CrmService({required this.parties, required this.intera
   Future<Interaction?> getInteraction(InteractionId id)=>interactions.get(id);
   Future<void> completeFollowUp(InteractionId id) async { final item=await interactions.get(id); if(item?.followUp==null) return; await interactions.save(item!.copyWith(followUp:item.followUp!.complete())); }
   Future<List<Interaction>> searchInteractions(String query)=>interactions.search(query);
+  Future<List<Interaction>> partyHistory(PartyId partyId) => interactions.forParty(partyId);
+  Future<List<Interaction>> outstandingFollowUps() => interactions.openFollowUps();
 }

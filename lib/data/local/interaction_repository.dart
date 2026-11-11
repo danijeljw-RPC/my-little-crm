@@ -8,6 +8,6 @@ class LocalInteractionRepository implements InteractionRepository {
   @override Future<Interaction?> get(InteractionId id) => _database.getInteraction(id);
   @override Future<Interaction> save(Interaction value) => _database.saveInteraction(value);
   @override Future<List<Interaction>> search(String query) => query.trim().isEmpty ? Future.value(const []) : _database.searchInteractions(query.trim());
-  Future<List<Interaction>> forParty(PartyId partyId) => _database.interactionsForParty(partyId);
-  Future<List<Interaction>> openFollowUps() => _database.openFollowUps();
+  @override Future<List<Interaction>> forParty(PartyId partyId) => _database.interactionsForParty(partyId);
+  @override Future<List<Interaction>> openFollowUps() => _database.openFollowUps();
 }
