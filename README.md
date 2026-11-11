@@ -17,3 +17,55 @@ Use My Little CRM to keep track of:
 - What you discussed
 
 My Little CRM is intended for personal, at-home use.
+
+## Development
+
+This Flutter application targets Windows, macOS, Linux, Android, and iOS. It
+is local-first: the core app does not need an account or a network connection.
+
+```sh
+flutter pub get
+flutter run -d macos # or ios, android, windows, linux
+```
+
+Install Flutter stable with its matching Dart SDK, then run `flutter doctor` and
+install the toolchains it identifies for the host platform. Use `flutter devices`
+to choose a device ID. Windows builds require Windows and Visual Studio C++ tools;
+Linux builds require Linux and the desktop GTK toolchain; Apple builds require
+macOS and Xcode; Android builds require the Android SDK. Web is not a release target.
+
+## Stage 1 workflow
+
+Record a company or person, communication method, date, summary, and optional
+contact, references, commitment, and follow-up. Parties group interactions into
+newest-first histories. Search finds notes, names, contacts, and references.
+Complete follow-ups from the outstanding list; their records remain in history.
+Open a party history to export its complete chronological history as PDF or JSON
+through the native save dialog.
+
+The primary SQLite database stays in the application's support directory. Core
+recording, search, follow-ups, and export generation work offline without an
+account. The destination selected in the native picker may itself be a cloud
+provider. Export files contain readable personal records: keep them in a location
+you trust. PDF/JSON exports are reports, not an encrypted restorable backup.
+
+Stage 1 does not yet include app-entry PIN/biometrics, encrypted backup/restore,
+recovery kits, notifications, calendar export, attachments, or cloud sync. Device
+security protects the current local database; app-level encryption follows in a
+separate security stage.
+
+## Verification
+
+```sh
+flutter analyze
+flutter test
+flutter test integration_test/core_journey_test.dart -d macos
+flutter build macos --debug
+```
+
+Use an emulator or disposable test device for the integration journey. It creates
+a temporary SQLite database, records three interactions (including one through the editor), searches a partial case
+number, completes a follow-up, reopens the database, and verifies both records
+remain in the party history. Replace `macos` with an available supported target
+to repeat acceptance there. Platform folders alone do not establish acceptance
+on all five operating systems.
