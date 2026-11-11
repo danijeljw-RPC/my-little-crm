@@ -7,11 +7,11 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../domain/models.dart';
 
-/// SQLite schema version 1 for the offline CRM record store.
+/// Versioned SQLite store with Dart-normalized Unicode search values.
 class AppDatabase {
   AppDatabase._(this._database);
 
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
   final Database _database;
 
   static Future<AppDatabase> open({String? path, bool useFfi = false}) async {
@@ -32,6 +32,9 @@ class AppDatabase {
           await db.execute('PRAGMA recursive_triggers = ON');
         },
         onCreate: (db, version) => _createSchema(db),
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) await _addUnicodeSearchColumns(db);
+        },
       ),
     );
     return AppDatabase._(database);
@@ -84,13 +87,52 @@ class AppDatabase {
     await database.execute(
       'CREATE INDEX interaction_references_value ON interaction_references(value)',
     );
+    await _addUnicodeSearchColumns(database);
+  }
+
+  static Future<void> _addUnicodeSearchColumns(Database database) async {
+    // The same Dart lowercase mapping is applied once on migration and on every
+    // write/query; SQLite lower() only maps ASCII on these native builds.
+    for (final entry in {
+      'parties': ['name'],
+      'interactions': ['summary', 'contact_name'],
+      'interaction_references': ['value'],
+    }.entries) {
+      for (final column in entry.value) {
+        await database.execute(
+          'ALTER TABLE ${entry.key} ADD COLUMN ${column}_search TEXT',
+        );
+      }
+      for (final row in await database.rawQuery(
+        'SELECT rowid AS migration_rowid, * FROM ${entry.key}',
+      )) {
+        await database.update(
+          entry.key,
+          {
+            for (final column in entry.value)
+              '${column}_search': (row[column] as String?)?.toLowerCase(),
+          },
+          where: 'rowid = ?',
+          whereArgs: [row['migration_rowid']],
+        );
+      }
+    }
+    await database.execute(
+      'CREATE INDEX parties_name_search ON parties(name_search)',
+    );
+    await database.execute(
+      'CREATE INDEX interactions_contact_search ON interactions(contact_name_search)',
+    );
+    await database.execute(
+      'CREATE INDEX references_value_search ON interaction_references(value_search)',
+    );
   }
 
   Future<Party?> partyByName(String name) async {
     final rows = await _database.query(
       'parties',
-      where: 'name = ?',
-      whereArgs: [name],
+      where: 'name_search = ?',
+      whereArgs: [name.toLowerCase()],
     );
     return rows.isEmpty ? null : _party(rows.single);
   }
@@ -115,6 +157,7 @@ class AppDatabase {
     await _database.insert('parties', {
       'id': party.id,
       'name': party.name,
+      'name_search': party.name.toLowerCase(),
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
     return party;
@@ -130,10 +173,12 @@ class AppDatabase {
         'id': item.id,
         'party_id': item.partyId,
         'summary': item.summary,
+        'summary_search': item.summary.toLowerCase(),
         'timestamp': _utc(item.timestamp),
         'created_at': _utc(item.createdAt),
         'method': item.method.name,
         'contact_name': item.contactName,
+        'contact_name_search': item.contactName?.toLowerCase(),
         'commitment': item.commitment,
         'follow_up_due_at': item.followUp == null
             ? null
@@ -149,6 +194,7 @@ class AppDatabase {
         await transaction.insert('interaction_references', {
           'interaction_id': item.id,
           'value': reference,
+          'value_search': reference.toLowerCase(),
         });
       }
     });
@@ -210,7 +256,7 @@ class AppDatabase {
         '''SELECT DISTINCT i.* FROM interactions i
       JOIN parties p ON p.id = i.party_id LEFT JOIN interaction_references r ON r.interaction_id = i.id
       WHERE i.id IN (SELECT id FROM interaction_search WHERE summary MATCH ?)
-      OR lower(i.summary) LIKE ? ESCAPE '\\' OR lower(p.name) LIKE ? ESCAPE '\\' OR lower(coalesce(i.contact_name, '')) LIKE ? ESCAPE '\\' OR lower(coalesce(r.value, '')) LIKE ? ESCAPE '\\'
+      OR i.summary_search LIKE ? ESCAPE '\\' OR p.name_search LIKE ? ESCAPE '\\' OR i.contact_name_search LIKE ? ESCAPE '\\' OR r.value_search LIKE ? ESCAPE '\\'
       ORDER BY i.timestamp DESC''',
         [tokens.isEmpty ? '""' : tokens, like, like, like, like],
       ),

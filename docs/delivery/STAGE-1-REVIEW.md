@@ -5,6 +5,12 @@ parties and histories, interaction recording/editing, outstanding follow-ups,
 local search, and PDF/JSON history export. The application entry point opens the
 durable database in the platform application-support directory.
 
+Database schema 2 adds Unicode-normalized search columns for party names,
+summaries, contact names, and reference numbers. Opening a schema 1 database
+backfills these columns transactionally while preserving the original display
+values and records. New writes and query text use the same Dart lowercase
+mapping; search continues in SQLite without scanning records in Dart per query.
+
 ## Native acceptance
 
 On 11 November 2026, `flutter test integration_test/core_journey_test.dart -d macos`

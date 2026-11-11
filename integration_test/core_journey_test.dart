@@ -47,6 +47,16 @@ void main() {
       (await service.searchInteractions('disput prem')).single.id,
       record.id,
     );
+    final accented = await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'Énergie',
+        summary: 'Billing call',
+      ),
+    );
+    expect(
+      (await service.searchInteractions('éNERGIE')).single.id,
+      accented.id,
+    );
   });
 
   testWidgets(
