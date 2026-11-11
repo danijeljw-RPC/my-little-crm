@@ -17,6 +17,9 @@ class ExportDocument {
 
 class HistoryExportService {
   const HistoryExportService(this.service, {this.clock = const SystemClock()});
+  static const unsupportedPdfTextMessage =
+      'PDF export cannot safely display every character in this history. '
+      'Choose JSON instead.';
   final CrmService service;
   final Clock clock;
 
@@ -58,6 +61,7 @@ class HistoryExportService {
   Future<ExportDocument> exportPdf(PartyId partyId) async {
     final party = await _party(partyId);
     final items = await _history(partyId);
+    _ensurePdfTextIsSupported(party, items);
     final font = pw.Font.ttf(
       await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
     );
@@ -116,6 +120,39 @@ class HistoryExportService {
   Future<List<Interaction>> _history(PartyId id) async =>
       (await service.partyHistory(id)).toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+  void _ensurePdfTextIsSupported(Party party, List<Interaction> items) {
+    final text = [
+      party.name,
+      for (final item in items) ...[
+        item.id,
+        item.summary,
+        if (item.contactName != null) item.contactName!,
+        ...item.referenceNumbers,
+        if (item.commitment != null) item.commitment!,
+      ],
+    ];
+    if (text.any(
+      (value) =>
+          value.runes.any((codePoint) => !_isPdfCodePointSupported(codePoint)),
+    )) {
+      throw StateError(unsupportedPdfTextMessage);
+    }
+  }
+
+  bool _isPdfCodePointSupported(int codePoint) =>
+      codePoint == 0x09 ||
+      codePoint == 0x0a ||
+      (codePoint >= 0x20 && codePoint <= 0x7e) ||
+      (codePoint >= 0xa0 && codePoint <= 0x377) ||
+      (codePoint >= 0x37a && codePoint <= 0x37f) ||
+      (codePoint >= 0x384 && codePoint <= 0x38a) ||
+      codePoint == 0x38c ||
+      (codePoint >= 0x38e && codePoint <= 0x3a1) ||
+      (codePoint >= 0x3a3 && codePoint <= 0x3e1) ||
+      (codePoint >= 0x3f0 && codePoint <= 0x52f) ||
+      (codePoint >= 0x2000 && codePoint <= 0x2064);
+
   Future<bool> save(ExportDocument document) async =>
       await FilePicker.saveFile(
         dialogTitle: 'Save communication history',

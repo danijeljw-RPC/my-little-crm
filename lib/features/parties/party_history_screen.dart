@@ -33,11 +33,13 @@ class _PartyHistoryScreenState extends State<PartyHistoryScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not export history. Please try again.'),
-          ),
-        );
+        final message =
+            error is StateError &&
+                error.message == HistoryExportService.unsupportedPdfTextMessage
+            ? HistoryExportService.unsupportedPdfTextMessage
+            : 'Could not export history. Please try again.';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     }
   }
