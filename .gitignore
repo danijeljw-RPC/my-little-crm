@@ -4,3 +4,4 @@
 .metadata
 build/
 devtools_options.yaml
+.flutter-plugins-dependencies

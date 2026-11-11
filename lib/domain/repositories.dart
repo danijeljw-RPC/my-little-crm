@@ -1,5 +1,52 @@
 import 'models.dart';
-abstract interface class PartyRepository { Future<Party> findOrCreate(String name); Future<Party?> get(PartyId id); Future<List<Party>> list(); }
-abstract interface class InteractionRepository { Future<Interaction> save(Interaction value); Future<Interaction?> get(InteractionId id); Future<List<Interaction>> search(String query); Future<List<Interaction>> forParty(PartyId partyId); Future<List<Interaction>> openFollowUps(); }
-class MemoryPartyRepository implements PartyRepository { final Map<PartyId, Party> _items={}; @override Future<Party> findOrCreate(String name) async { final found=_items.values.where((p)=>p.name==name).firstOrNull; return found ?? (_items[name]=Party(id:name,name:name)); } @override Future<Party?> get(PartyId id) async=>_items[id]; @override Future<List<Party>> list() async => _items.values.toList()..sort((a, b) => a.name.compareTo(b.name)); }
-class MemoryInteractionRepository implements InteractionRepository { final Map<InteractionId, Interaction> _items={}; @override Future<Interaction?> get(InteractionId id) async=>_items[id]; @override Future<Interaction> save(Interaction value) async=>_items[value.id]=value; @override Future<List<Interaction>> search(String query) async=>_items.values.where((i)=>i.summary.toLowerCase().contains(query.toLowerCase())).toList(); @override Future<List<Interaction>> forParty(PartyId partyId) async => _items.values.where((item) => item.partyId == partyId).toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp)); @override Future<List<Interaction>> openFollowUps() async => _items.values.where((item) => item.followUp?.status == FollowUpStatus.open).toList()..sort((a, b) => a.followUp!.dueAt.compareTo(b.followUp!.dueAt)); }
+
+abstract interface class PartyRepository {
+  Future<Party> findOrCreate(String name);
+  Future<Party?> get(PartyId id);
+  Future<List<Party>> list();
+}
+
+abstract interface class InteractionRepository {
+  Future<Interaction> save(Interaction value);
+  Future<Interaction?> get(InteractionId id);
+  Future<List<Interaction>> search(String query);
+  Future<List<Interaction>> forParty(PartyId partyId);
+  Future<List<Interaction>> openFollowUps();
+}
+
+class MemoryPartyRepository implements PartyRepository {
+  final Map<PartyId, Party> _items = {};
+  @override
+  Future<Party> findOrCreate(String name) async {
+    final found = _items.values.where((p) => p.name == name).firstOrNull;
+    return found ?? (_items[name] = Party(id: name, name: name));
+  }
+
+  @override
+  Future<Party?> get(PartyId id) async => _items[id];
+  @override
+  Future<List<Party>> list() async =>
+      _items.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+}
+
+class MemoryInteractionRepository implements InteractionRepository {
+  final Map<InteractionId, Interaction> _items = {};
+  @override
+  Future<Interaction?> get(InteractionId id) async => _items[id];
+  @override
+  Future<Interaction> save(Interaction value) async => _items[value.id] = value;
+  @override
+  Future<List<Interaction>> search(String query) async => _items.values
+      .where((i) => i.summary.toLowerCase().contains(query.toLowerCase()))
+      .toList();
+  @override
+  Future<List<Interaction>> forParty(PartyId partyId) async =>
+      _items.values.where((item) => item.partyId == partyId).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  @override
+  Future<List<Interaction>> openFollowUps() async =>
+      _items.values
+          .where((item) => item.followUp?.status == FollowUpStatus.open)
+          .toList()
+        ..sort((a, b) => a.followUp!.dueAt.compareTo(b.followUp!.dueAt));
+}
