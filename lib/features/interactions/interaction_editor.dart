@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
 import '../../domain/crm_service.dart';
+import 'communication_method_icon.dart';
 
 Future<void> editInteraction(
   BuildContext context,
@@ -237,7 +238,17 @@ class _InteractionEditorState extends State<InteractionEditor> {
               decoration: const InputDecoration(labelText: 'Method'),
               items: [
                 for (final value in CommunicationMethod.values)
-                  DropdownMenuItem(value: value, child: Text(value.name)),
+                  DropdownMenuItem(
+                    value: value,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(value.icon, size: 20),
+                        const SizedBox(width: 12),
+                        Text(value.name),
+                      ],
+                    ),
+                  ),
               ],
               onChanged: (v) => setState(() {
                 method = v!;

@@ -80,7 +80,39 @@ void main() {
     expect(find.text('BrightSure Insurance'), findsOneWidget);
     expect(find.text('Premium disputed after renewal'), findsOneWidget);
   });
-  testWidgets('refreshes the current search after editing from history', (
+  testWidgets('tapping a search result opens that interaction', (tester) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026, 11, 11)),
+    );
+    await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'BrightSure',
+        summary: 'Premium disputed fff',
+      ),
+    );
+    await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'BrightSure',
+        summary: 'Unrelated call',
+      ),
+    );
+    await tester.pumpWidget(MyLittleCrmApp(service: service));
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'fff');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Premium disputed fff'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit interaction'), findsOneWidget);
+    expect(find.text('Unrelated call'), findsNothing);
+    final summary = tester.widget<TextFormField>(
+      find.byKey(const Key('summary')),
+    );
+    expect(summary.controller!.text, 'Premium disputed fff');
+  });
+  testWidgets('refreshes the current search after editing a result', (
     tester,
   ) async {
     final service = CrmService(
@@ -101,13 +133,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Premium disputed'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Premium disputed'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('summary')), 'Claim settled');
     await tester.ensureVisible(find.text('Save interaction'));
     await tester.tap(find.text('Save interaction'));
-    await tester.pumpAndSettle();
-    await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Premium disputed'), findsNothing);
     expect(find.text('BrightSure'), findsNothing);
