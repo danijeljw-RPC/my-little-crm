@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:sqflite/sqflite.dart' as sqlite;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -13,6 +15,39 @@ import 'package:my_little_crm/domain/models.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('reopened FTS4 index matches reordered partial words', (
+    tester,
+  ) async {
+    final directory = await Directory.systemTemp.createTemp('crm-fts4-');
+    addTearDown(() => directory.delete(recursive: true));
+    final path = '${directory.path}/fts4.sqlite';
+    final initial = await AppDatabase.open(path: path);
+    await initial.close();
+    final native = await sqlite.openDatabase(path);
+    await native.execute('DROP TABLE interaction_search');
+    await native.execute(
+      'CREATE VIRTUAL TABLE interaction_search USING fts4(id, summary)',
+    );
+    await native.close();
+    final db = await AppDatabase.open(path: path);
+    addTearDown(db.close);
+    final service = CrmService(
+      parties: LocalPartyRepository(db),
+      interactions: LocalInteractionRepository(db),
+      clock: FixedClock(DateTime.utc(2026, 11, 11)),
+    );
+    final record = await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'Insurance',
+        summary: 'Premium payment remains disputed',
+      ),
+    );
+    expect(
+      (await service.searchInteractions('disput prem')).single.id,
+      record.id,
+    );
+  });
 
   testWidgets(
     'offline records survive reopening and completed follow-ups remain in history',

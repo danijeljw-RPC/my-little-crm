@@ -58,9 +58,13 @@ class AppDatabase {
       method TEXT NOT NULL, contact_name TEXT, commitment TEXT,
       follow_up_due_at TEXT, follow_up_status TEXT)''');
     try {
-      await database.execute('CREATE VIRTUAL TABLE interaction_search USING fts5(id UNINDEXED, summary)');
+      await database.execute(
+        'CREATE VIRTUAL TABLE interaction_search USING fts5(id UNINDEXED, summary)',
+      );
     } on DatabaseException {
-      await database.execute('CREATE VIRTUAL TABLE interaction_search USING fts4(id, summary)');
+      await database.execute(
+        'CREATE VIRTUAL TABLE interaction_search USING fts4(id, summary)',
+      );
     }
     await database.execute(
       'CREATE TRIGGER interaction_search_insert AFTER INSERT ON interactions BEGIN INSERT INTO interaction_search(id, summary) VALUES(new.id, new.summary); END',
@@ -188,10 +192,19 @@ class AppDatabase {
         .replaceAll('%', '\\%')
         .replaceAll('_', '\\_');
     final like = '%$escaped%';
-    final tokens = RegExp(
-      r'[\p{L}\p{N}]+',
-      unicode: true,
-    ).allMatches(query).map((m) => '"${m.group(0)}"*').join(' AND ');
+    // Inspect the persisted virtual table: reopening must keep its query dialect
+    // even if this device also supports another FTS module.
+    final schema = await _database.rawQuery(
+      "SELECT sql FROM sqlite_master WHERE name = 'interaction_search'",
+    );
+    final usesFts4 = RegExp(
+      r'USING\s+fts4\b',
+      caseSensitive: false,
+    ).hasMatch(schema.single['sql'] as String);
+    final tokens = RegExp(r'[\p{L}\p{N}]+', unicode: true)
+        .allMatches(query)
+        .map((m) => usesFts4 ? '"${m.group(0)}*"' : '"${m.group(0)}"*')
+        .join(' AND ');
     return _load(
       await _database.rawQuery(
         '''SELECT DISTINCT i.* FROM interactions i

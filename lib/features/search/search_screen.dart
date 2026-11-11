@@ -14,7 +14,9 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   List<Interaction> _results = const [];
   int _generation = 0;
+  String _query = '';
   Future<void> _search(String value) async {
+    _query = value;
     final generation = ++_generation;
     final results = value.trim().isEmpty
         ? <Interaction>[]
@@ -45,7 +47,11 @@ class _SearchScreenState extends State<SearchScreen> {
         child: ListView(
           children: [
             for (final item in _results)
-              _Result(item: item, service: widget.service),
+              _Result(
+                item: item,
+                service: widget.service,
+                onReturn: () => _search(_query),
+              ),
           ],
         ),
       ),
@@ -54,7 +60,12 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 class _Result extends StatelessWidget {
-  const _Result({required this.item, required this.service});
+  const _Result({
+    required this.item,
+    required this.service,
+    required this.onReturn,
+  });
+  final Future<void> Function() onReturn;
   final Interaction item;
   final CrmService service;
   @override
@@ -62,8 +73,26 @@ class _Result extends StatelessWidget {
     future: service.parties.get(item.partyId),
     builder: (context, snapshot) => ListTile(
       title: Text(snapshot.data?.name ?? 'Unknown party'),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item.summary),Text('${item.timestamp.toLocal()} · ${item.method.name}')]),
-      onTap: snapshot.data == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PartyHistoryScreen(service: service, party: snapshot.data!))),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(item.summary),
+          Text('${item.timestamp.toLocal()} · ${item.method.name}'),
+        ],
+      ),
+      onTap: snapshot.data == null
+          ? null
+          : () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PartyHistoryScreen(
+                    service: service,
+                    party: snapshot.data!,
+                  ),
+                ),
+              );
+              await onReturn();
+            },
     ),
   );
 }
