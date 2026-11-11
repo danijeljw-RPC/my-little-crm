@@ -55,6 +55,7 @@ class _InteractionEditorState extends State<InteractionEditor> {
   late DateTime? due = widget.existing?.followUp?.dueAt.toLocal();
   late CommunicationMethod method =
       widget.existing?.method ?? CommunicationMethod.phone;
+  bool reopeningFollowUp = false;
   bool saving = false;
   String? error;
   @override
@@ -115,7 +116,11 @@ class _InteractionEditorState extends State<InteractionEditor> {
               : FollowUp(
                   dueAt: due!.toUtc(),
                   status:
-                      widget.existing?.followUp?.status ?? FollowUpStatus.open,
+                      widget.existing?.followUp?.status ==
+                              FollowUpStatus.completed &&
+                          !reopeningFollowUp
+                      ? FollowUpStatus.completed
+                      : FollowUpStatus.open,
                 ),
         ),
       );
@@ -233,6 +238,7 @@ class _InteractionEditorState extends State<InteractionEditor> {
                 if (value != null) {
                   setState(() {
                     due = value;
+                    reopeningFollowUp = true;
                   });
                 }
               },
@@ -246,8 +252,15 @@ class _InteractionEditorState extends State<InteractionEditor> {
               TextButton(
                 onPressed: () => setState(() {
                   due = null;
+                  reopeningFollowUp = true;
                 }),
                 child: const Text('Remove follow-up'),
+              ),
+            if (widget.existing?.followUp?.status ==
+                    FollowUpStatus.completed &&
+                !reopeningFollowUp)
+              const Text(
+                'This follow-up is completed. Choose a date to reopen it.',
               ),
             if (error != null) Text(error!),
             FilledButton(
