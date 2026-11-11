@@ -1,0 +1,5 @@
+import 'models.dart';
+abstract interface class PartyRepository { Future<Party> findOrCreate(String name); Future<Party?> get(PartyId id); }
+abstract interface class InteractionRepository { Future<Interaction> save(Interaction value); Future<Interaction?> get(InteractionId id); Future<List<Interaction>> search(String query); }
+class MemoryPartyRepository implements PartyRepository { final Map<PartyId, Party> _items={}; @override Future<Party> findOrCreate(String name) async { final found=_items.values.where((p)=>p.name==name).firstOrNull; return found ?? (_items[name]=Party(id:name,name:name)); } @override Future<Party?> get(PartyId id) async=>_items[id]; }
+class MemoryInteractionRepository implements InteractionRepository { final Map<InteractionId, Interaction> _items={}; @override Future<Interaction?> get(InteractionId id) async=>_items[id]; @override Future<Interaction> save(Interaction value) async=>_items[value.id]=value; @override Future<List<Interaction>> search(String query) async=>_items.values.where((i)=>i.summary.toLowerCase().contains(query.toLowerCase())).toList(); }
