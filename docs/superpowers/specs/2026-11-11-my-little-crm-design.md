@@ -19,6 +19,8 @@ requiring personal details, and leave backups under the user's control.
   number, agreement/promise, and follow-up.
 - Make follow-ups visible in the app, available as local notifications, and
   optionally exportable to the device calendar.
+- Export a selected party's complete communication history as a readable PDF or
+  a portable JSON document without sending it to a service.
 - Persist the primary data locally in SQLite and work without a connection.
 - Let the user explicitly back up and restore an encrypted database file using
   the operating system's file picker and its configured providers (iCloud Drive,

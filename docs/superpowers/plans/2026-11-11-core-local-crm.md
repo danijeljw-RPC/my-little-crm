@@ -44,6 +44,7 @@
 - `lib/features/search/*`: global search UI and result grouping.
 - `lib/features/follow_ups/*`: outstanding follow-up list and completion actions.
 - `test/domain/*`, `test/data/*`, `test/features/*`: unit, database, and widget tests.
+- `lib/features/export/*`: local PDF and JSON party-history exporters plus share/save adapters.
 - `integration_test/core_journey_test.dart`: end-to-end local workflow on supported device targets.
 
 ### Task 1: Create the cross-platform Flutter foundation
@@ -261,14 +262,54 @@ git add lib/data/local lib/domain lib/features/search test/data test/features
 git commit -m "feat: add local interaction search"
 ```
 
-### Task 6: Verify the end-to-end offline journey and release documentation
+### Task 6: Export a party communication history as PDF or JSON
+
+**Files:**
+- Create: `lib/features/export/history_export_service.dart`, `lib/features/export/export_history_screen.dart`
+- Create: `test/features/history_export_service_test.dart`
+
+**Interfaces:**
+- Consumes: party timelines and interaction records from Tasks 2–4.
+- Produces: `HistoryExportService.exportPdf(PartyId partyId)` and `HistoryExportService.exportJson(PartyId partyId)`, each returning an export document containing the complete ordered history.
+
+- [ ] **Step 1: Write failing export tests for portable content**
+
+```dart
+final json = await service.exportJson(brightSure.id);
+expect(json.content, contains('BS-841902'));
+expect(json.content, contains('Revised quote promised'));
+expect(json.content, contains('"party"'));
+```
+
+- [ ] **Step 2: Run the export tests to verify they fail**
+
+Run: `flutter test test/features/history_export_service_test.dart`
+Expected: FAIL because the export service does not exist.
+
+- [ ] **Step 3: Implement local PDF and JSON export**
+
+JSON must be a versioned, UTF-8 document containing the complete party record and all its interactions in chronological order. The PDF must identify the party, generation time, and all interaction details in readable chronological order. Write exports through the native save/share picker only; no data leaves the device unless the user selects a destination.
+
+- [ ] **Step 4: Run the export tests and analysis**
+
+Run: `flutter analyze && flutter test test/features/history_export_service_test.dart`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/features/export test/features
+git commit -m "feat: export party histories as PDF and JSON"
+```
+
+### Task 7: Verify the end-to-end offline journey and release documentation
 
 **Files:**
 - Create: `integration_test/core_journey_test.dart`
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: complete local application from Tasks 1–5.
+- Consumes: complete local application from Tasks 1–6.
 - Produces: a repeatable local-device acceptance check and setup instructions for each target platform.
 
 - [ ] **Step 1: Write the end-to-end journey test**
@@ -285,7 +326,7 @@ Expected: FAIL until all prior workflow routes and controls are available.
 
 - [ ] **Step 3: Add target setup and offline/privacy instructions to `README.md`**
 
-Document Flutter installation, how to run each supported platform target, that no account or network is required, and the first-release exclusions: encryption backup/recovery, app lock, calendar export, and notifications arrive in later plans.
+Document Flutter installation, how to run each supported platform target, that no account or network is required, how local PDF/JSON exports work, and the first-release exclusions: encryption backup/recovery, app lock, calendar export, and notifications arrive in later plans.
 
 - [ ] **Step 4: Run the full local verification suite**
 
@@ -301,7 +342,7 @@ git commit -m "test: cover core local CRM journey"
 
 ## Self-review
 
-- **Spec coverage:** This plan covers the requested platform shell, offline SQLite source of truth, parties, interactions, chronological history, follow-ups, and search. Device lock, encrypted backup/restore, static WASM recovery, notifications/calendar integration, attachments, and BYO cloud are separate release stages because they are independent security/platform subsystems.
+- **Spec coverage:** This plan covers the requested platform shell, offline SQLite source of truth, parties, interactions, chronological history, follow-ups, search, and local PDF/JSON history export. Device lock, encrypted backup/restore, static WASM recovery, notifications/calendar integration, attachments, and BYO cloud are separate release stages because they are independent security/platform subsystems.
 - **Step scan:** Every task begins with a focused failing test, has a named implementation surface, and finishes with an explicit command and commit.
 - **Type consistency:** `CrmService`, repository types, the `InteractionId` completion path, and `SearchResult` are consistently introduced before use.
 - **Review focus:** Each identified user-risk case is assigned to its owning task's test step.
