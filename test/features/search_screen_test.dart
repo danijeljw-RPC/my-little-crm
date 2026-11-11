@@ -7,6 +7,27 @@ import 'package:my_little_crm/domain/models.dart';
 import 'package:my_little_crm/domain/repositories.dart';
 
 void main() {
+  testWidgets('refreshes preserved search after adding a matching record', (tester) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026, 11, 11)),
+    );
+    await tester.pumpWidget(MyLittleCrmApp(service: service));
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'refund');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add interaction'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('party-name')), 'BrightSure');
+    await tester.enterText(find.byKey(const Key('summary')), 'Refund promised');
+    await tester.ensureVisible(find.text('Save interaction'));
+    await tester.tap(find.text('Save interaction'));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund promised'), findsOneWidget);
+    expect(find.text('refund'), findsOneWidget);
+  });
   testWidgets('finds an interaction from a partial note search', (
     tester,
   ) async {

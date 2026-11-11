@@ -82,7 +82,7 @@ class _InteractionHomeState extends State<InteractionHome> {
       label: const Text('Add interaction'),
     ),
     body: _selectedIndex == 3
-        ? SearchScreen(service: widget.service)
+        ? SearchScreen(service: widget.service, revision: _revision)
         : _selectedIndex == 2
         ? PartyListScreen(service: widget.service)
         : _selectedIndex == 1

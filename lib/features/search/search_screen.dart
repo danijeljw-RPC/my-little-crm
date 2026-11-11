@@ -5,8 +5,9 @@ import '../../domain/models.dart';
 import '../parties/party_history_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, required this.service});
+  const SearchScreen({super.key, required this.service, this.revision = 0});
   final CrmService service;
+  final int revision;
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
@@ -15,6 +16,14 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Interaction> _results = const [];
   int _generation = 0;
   String _query = '';
+  @override
+  void didUpdateWidget(covariant SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revision != widget.revision) {
+      _search(_query);
+    }
+  }
+
   Future<void> _search(String value) async {
     _query = value;
     final generation = ++_generation;
