@@ -52,6 +52,110 @@ void main() {
       expect((await interactions.get(item.id))!.summary, 'Edited call');
     },
   );
+
+  testWidgets('rescheduling a completed follow-up reopens it', (tester) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026, 11, 11, 10)),
+    );
+    final item = await service.createInteraction(
+      CreateInteractionCommand(
+        partyName: 'BrightSure Insurance',
+        summary: 'Request an updated quote',
+        followUpDueAt: DateTime.utc(2026, 11, 14),
+      ),
+    );
+    await service.completeFollowUp(item.id);
+    final completed = (await service.getInteraction(item.id))!;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => editInteraction(
+                context,
+                service,
+                existing: completed,
+                partyName: 'BrightSure Insurance',
+              ),
+              child: const Text('Edit'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove follow-up'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add follow-up date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save interaction'));
+    await tester.tap(find.text('Save interaction'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await service.getInteraction(item.id))!.followUp!.status,
+      FollowUpStatus.open,
+    );
+    expect(await service.outstandingFollowUps(), hasLength(1));
+  });
+
+  testWidgets('editing details keeps a completed follow-up completed', (
+    tester,
+  ) async {
+    final service = CrmService(
+      parties: MemoryPartyRepository(),
+      interactions: MemoryInteractionRepository(),
+      clock: FixedClock(DateTime.utc(2026, 11, 11, 10)),
+    );
+    final item = await service.createInteraction(
+      CreateInteractionCommand(
+        partyName: 'BrightSure Insurance',
+        summary: 'Request an updated quote',
+        followUpDueAt: DateTime.utc(2026, 11, 14),
+      ),
+    );
+    await service.completeFollowUp(item.id);
+    final completed = (await service.getInteraction(item.id))!;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => editInteraction(
+                context,
+                service,
+                existing: completed,
+                partyName: 'BrightSure Insurance',
+              ),
+              child: const Text('Edit'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('summary')), 'Quote received');
+    await tester.ensureVisible(find.text('Save interaction'));
+    await tester.tap(find.text('Save interaction'));
+    await tester.pumpAndSettle();
+
+    final saved = (await service.getInteraction(item.id))!;
+    expect(saved.summary, 'Quote received');
+    expect(saved.followUp!.status, FollowUpStatus.completed);
+    expect(await service.outstandingFollowUps(), isEmpty);
+  });
+
   testWidgets('records an interaction and retains it in the party timeline', (
     tester,
   ) async {
