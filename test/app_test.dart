@@ -7,7 +7,7 @@ void main() {
     await tester.pumpWidget(const MyLittleCrmApp());
 
     expect(find.text('My Little CRM'), findsOneWidget);
-    expect(find.text('Interactions'), findsOneWidget);
+    expect(find.text('No interactions yet'), findsOneWidget);
   });
 
   testWidgets('records an interaction from the quick-entry form', (tester) async {
