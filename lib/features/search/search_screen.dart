@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/crm_service.dart';
 import '../../domain/models.dart';
-import '../parties/party_history_screen.dart';
+import '../interactions/interaction_editor.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key, required this.service, this.revision = 0});
@@ -104,13 +104,11 @@ class _Result extends StatelessWidget {
       onTap: snapshot.data == null
           ? null
           : () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PartyHistoryScreen(
-                    service: service,
-                    party: snapshot.data!,
-                  ),
-                ),
+              await editInteraction(
+                context,
+                service,
+                existing: item,
+                partyName: snapshot.data!.name,
               );
               await onReturn();
             },
