@@ -9,7 +9,7 @@ class FollowUp { const FollowUp({required this.dueAt, this.status = FollowUpStat
 class Interaction {
   const Interaction({required this.id, required this.partyId, required this.summary, required this.timestamp, required this.createdAt, this.method = CommunicationMethod.phone, this.contactName, this.referenceNumbers = const [], this.commitment, this.followUp});
   final InteractionId id; final PartyId partyId; final String summary; final DateTime timestamp; final DateTime createdAt; final CommunicationMethod method; final String? contactName; final List<String> referenceNumbers; final String? commitment; final FollowUp? followUp;
-  Interaction copyWith({String? summary, FollowUp? followUp}) => Interaction(id:id, partyId:partyId, summary:summary ?? this.summary, timestamp:timestamp, createdAt:createdAt, method:method, contactName:contactName, referenceNumbers:referenceNumbers, commitment:commitment, followUp:followUp ?? this.followUp);
+  Interaction copyWith({String? summary, DateTime? createdAt, FollowUp? followUp}) => Interaction(id:id, partyId:partyId, summary:summary ?? this.summary, timestamp:timestamp, createdAt:createdAt ?? this.createdAt, method:method, contactName:contactName, referenceNumbers:referenceNumbers, commitment:commitment, followUp:followUp ?? this.followUp);
 }
 class CreateInteractionCommand { const CreateInteractionCommand({required this.partyName, required this.summary, this.followUpDueAt}); final String partyName; final String summary; final DateTime? followUpDueAt; }
 class UpdateInteractionCommand { const UpdateInteractionCommand({required this.interaction, required this.summary}); final Interaction interaction; final String summary; }
