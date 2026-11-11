@@ -17,3 +17,13 @@ Use My Little CRM to keep track of:
 - What you discussed
 
 My Little CRM is intended for personal, at-home use.
+
+## Development
+
+This Flutter application targets Windows, macOS, Linux, Android, and iOS. It
+is local-first: the core app does not need an account or a network connection.
+
+```sh
+flutter pub get
+flutter run -d macos # or ios, android, windows, linux
+```
