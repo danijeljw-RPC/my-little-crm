@@ -63,6 +63,14 @@ flutter test integration_test/core_journey_test.dart -d macos
 flutter build macos --debug
 ```
 
+## Continuous integration
+
+Pull requests run the `Flutter validation` workflow. Configure branch
+protection to require both of its checks before merging:
+
+- `Flutter validation / Analyze and unit tests`
+- `Flutter validation / macOS integration`
+
 Use an emulator or disposable test device for the integration journey. It creates
 a temporary SQLite database, records three interactions (including one through the editor), searches a partial case
 number, completes a follow-up, reopens the database, and verifies both records
