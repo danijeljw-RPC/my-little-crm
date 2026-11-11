@@ -1,1 +1,6 @@
 .superpowers/
+.dart_tool/
+.idea/
+.metadata
+build/
+devtools_options.yaml
