@@ -54,39 +54,59 @@ storeFile=/Users/danijeljw/.android-keys/mylittlecrm-release.jks
   `keyPassword` are the same value.
 - `storeFile` must be an absolute path. Gradle does not expand `~`.
 
-## 3. Use the key in `android/app/build.gradle.kts`
+## 3. Signing config in `android/app/build.gradle.kts` (already done)
 
-Replace the default debug signing
-(`signingConfig = signingConfigs.getByName("debug")`) with:
+`android/app/build.gradle.kts` signs release builds with this key whenever
+`android/key.properties` exists. The signing setup lives **inside the single
+existing `android { }` block**. Don't add a second `android { }` block: Gradle
+applies both, and whichever comes last wins. That's how a release build ends up
+signed with the debug key.
 
 ```kotlin
-import java.util.Properties
 import java.io.FileInputStream
+import java.util.Properties
 
+plugins { /* unchanged */ }
+
+val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties().apply {
-    val f = rootProject.file("key.properties")
-    if (f.exists()) load(FileInputStream(f))
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
 }
+val hasReleaseKeystore = keystorePropertiesFile.exists()
 
 android {
-    // ...
+    // namespace, compileSdk, defaultConfig, ... unchanged
+
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn("WARNING: android/key.properties not found; ...")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
 ```
 
-The `import` lines go at the very top of the file, above `plugins { ... }`.
+Without `key.properties`, release builds fall back to the debug key so
+`flutter run --release` still works. The warning only appears with
+`flutter build -v`, so **always run the `apksigner` check in step 4** before
+distributing.
 
 ## 4. Build
 
