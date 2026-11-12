@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
@@ -163,7 +165,14 @@ class _InteractionEditorState extends State<InteractionEditor> {
       24,
       24,
       24,
-      24 + MediaQuery.viewInsetsOf(context).bottom,
+      // Keep clear of the keyboard and, on edge-to-edge Android, the system
+      // navigation bar (#22). When the keyboard is up it already covers the
+      // nav bar, so take whichever is larger rather than summing them.
+      24 +
+          math.max(
+            MediaQuery.viewInsetsOf(context).bottom,
+            MediaQuery.viewPaddingOf(context).bottom,
+          ),
     ),
     child: Form(
       key: form,
