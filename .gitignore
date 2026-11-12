@@ -5,3 +5,6 @@
 build/
 devtools_options.yaml
 .flutter-plugins-dependencies
+
+# Release artifacts from scripts/release.sh
+/dist/

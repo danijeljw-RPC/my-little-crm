@@ -7,14 +7,23 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Release signing reads android/key.properties (git-ignored). See docs/ANDROID-RELEASE.md.
+// Release signing is opt-in: only builds started with MLC_RELEASE_SIGNING=1 (set by
+// scripts/release.sh) use the release keystore from android/key.properties (git-ignored).
+// Every other build, including `flutter run --release` and scripts/run.sh, uses the debug key.
+// See docs/ANDROID-RELEASE.md.
+val useReleaseSigning = providers.environmentVariable("MLC_RELEASE_SIGNING").orNull == "1"
 val keystorePropertiesFile = rootProject.file("key.properties")
+if (useReleaseSigning && !keystorePropertiesFile.exists()) {
+    throw GradleException(
+        "MLC_RELEASE_SIGNING=1 but android/key.properties was not found. " +
+            "See docs/ANDROID-RELEASE.md."
+    )
+}
 val keystoreProperties = Properties().apply {
-    if (keystorePropertiesFile.exists()) {
+    if (useReleaseSigning) {
         FileInputStream(keystorePropertiesFile).use { load(it) }
     }
 }
-val hasReleaseKeystore = keystorePropertiesFile.exists()
 
 android {
     namespace = "com.repasscloud.mylittlecrm"
@@ -39,29 +48,23 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseKeystore) {
+        if (useReleaseSigning) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+                fun prop(name: String) = keystoreProperties.getProperty(name)
+                    ?: throw GradleException("android/key.properties is missing '$name'.")
+                keyAlias = prop("keyAlias")
+                keyPassword = prop("keyPassword")
+                storeFile = file(prop("storeFile"))
+                storePassword = prop("storePassword")
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                // Lets `flutter run --release` work on machines without the release key.
-                // Never distribute an APK built this way.
-                logger.warn(
-                    "WARNING: android/key.properties not found; release build is signed " +
-                        "with the DEBUG key. Do not distribute this APK."
-                )
-                signingConfigs.getByName("debug")
-            }
+            // Debug key unless scripts/release.sh asked for the release key.
+            // Never distribute an APK signed with the debug key.
+            signingConfig = signingConfigs.getByName(if (useReleaseSigning) "release" else "debug")
         }
     }
 }
