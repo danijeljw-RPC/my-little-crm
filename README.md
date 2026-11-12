@@ -34,6 +34,23 @@ to choose a device ID. Windows builds require Windows and Visual Studio C++ tool
 Linux builds require Linux and the desktop GTK toolchain; Apple builds require
 macOS and Xcode; Android builds require the Android SDK. Web is not a release target.
 
+To pick a target without looking up IDs, use the run helper. With no argument it
+lists running devices, launchable emulators and (on macOS) shut-down iOS simulators;
+with a name or ID it boots the simulator/emulator if needed and runs the app there.
+Matching is case-insensitive, and extra arguments are passed to `flutter run`.
+
+```sh
+scripts/run.sh                    # macOS / Linux (zsh)
+scripts/run.sh "iPhone 18 Pro"
+scripts/run.sh macos --release
+```
+
+```powershell
+.\scripts\run.ps1                 # Windows
+.\scripts\run.ps1 windows
+.\scripts\run.ps1 "swoovr-pixel"
+```
+
 ## Stage 1 workflow
 
 Record a company or person, communication method, date, summary, and optional
