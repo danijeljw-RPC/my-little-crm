@@ -51,6 +51,16 @@ scripts/run.sh macos --release
 .\scripts\run.ps1 "swoovr-pixel"
 ```
 
+These helpers, `flutter run` and `flutter build` always sign Android builds with
+the debug key. Only the release script uses the release key:
+
+```sh
+scripts/release.sh             # build + verify a release-signed APK into dist/
+scripts/release.sh --publish   # ...and create the GitHub release
+```
+
+See [Android release guide](docs/ANDROID-RELEASE.md).
+
 ## Stage 1 workflow
 
 Record a company or person, communication method, date, summary, and optional
