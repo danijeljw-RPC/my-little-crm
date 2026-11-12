@@ -1,0 +1,12 @@
+Next steps:
+1. Add the Android signing secrets (run from the main checkout):
+base64 -i ~/.android-keys/mylittlecrm-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body mylittlecrm
+2. Merge draft PR #27.
+3. Bump the version in pubspec.yaml (1.0.0 is already released), add a matching CHANGELOG section, then git commit --allow-empty -m release && git push origin main.
+
+The work is committed on branch worktree-release-all-platforms and pushed.
+
+result: Draft PR #27 (https://github.com/danijeljw-RPC/my-little-crm/pull/27) adds a workflow that builds Android, macOS and Windows and publishes a release when a release commit is pushed to main; it needs the Android key secrets before its first run.
+
