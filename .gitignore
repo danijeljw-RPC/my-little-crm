@@ -6,5 +6,8 @@ build/
 devtools_options.yaml
 .flutter-plugins-dependencies
 
+# claude
+.claude/
+
 # Release artifacts from scripts/release.sh
 /dist/
