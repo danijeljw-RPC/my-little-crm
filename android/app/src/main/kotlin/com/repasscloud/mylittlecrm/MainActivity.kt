@@ -1,4 +1,4 @@
-package com.example.my_little_crm
+package com.repasscloud.mylittlecrm
 
 import io.flutter.embedding.android.FlutterActivity
 
