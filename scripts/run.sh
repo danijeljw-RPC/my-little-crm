@@ -55,6 +55,29 @@ find_running() {
   return 1
 }
 
+find_adb() {
+  local sdk
+  command -v adb 2>/dev/null && return 0
+  for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    [[ -n $sdk && -x $sdk/platform-tools/adb ]] && { print -r -- "$sdk/platform-tools/adb"; return 0; }
+  done
+  return 1
+}
+
+# Print the device id (e.g. emulator-5554) of a running Android emulator whose AVD is $1.
+# Flutter lists running AVDs by model name, so ask each emulator for its AVD name.
+find_running_avd() {
+  local avd=${1:l} adb line id name
+  adb=$(find_adb) || return 1
+  for line in "${(@f)$(running_devices)}"; do
+    id=${line#*|}
+    [[ $id == emulator-* ]] || continue
+    name=$("$adb" -s "$id" emu avd name 2>/dev/null | head -1 | tr -d '\r')
+    [[ ${name:l} == $avd ]] && { print -r -- $id; return 0; }
+  done
+  return 1
+}
+
 show_simulator_window() {
   open -a Simulator 2>/dev/null || open -a DeviceHub 2>/dev/null || true
 }
@@ -120,6 +143,10 @@ fi
 # 3. A launchable emulator (Android AVD, or the generic iOS simulator).
 for emu in "${(@f)$(emulator_ids)}"; do
   if [[ -n $emu && ${emu:l} == ${target:l} ]]; then
+    if device=$(find_running_avd "$emu"); then
+      print "▶ Emulator $emu is already running; running on $device"
+      exec flutter run -d "$device" "$@"
+    fi
     before=$(running_devices | cut -d'|' -f2)
     print "⏻ Launching emulator $emu (waiting up to 3 min)…"
     flutter emulators --launch "$emu" >/dev/null

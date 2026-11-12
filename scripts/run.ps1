@@ -9,13 +9,13 @@
   .\scripts\run.ps1 "swoovr-pixel"        # launches the Android emulator first
   .\scripts\run.ps1 edge --release        # extra args go straight to `flutter run`
 #>
-param(
-  [Parameter(Position = 0)] [string] $Target,
-  [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]] $FlutterArgs = @()
-)
+# Deliberately a simple (non-advanced) script: no [Parameter()] attributes, so PowerShell
+# doesn't claim --debug / --verbose as its own common parameters and they reach flutter.
+param([string] $Target)
+$FlutterArgs = @($args)
 
 $ErrorActionPreference = 'Stop'
-# flutter prints UTF-8 (the " • " column separators); decode it as such on Windows PowerShell 5.1.
+# flutter prints UTF-8 (its column separator is U+2022); decode it as such on Windows PowerShell 5.1.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Sep = ' ' + [char]0x2022 + ' '
 Set-Location (Join-Path $PSScriptRoot '..')
@@ -66,6 +66,31 @@ function Find-Running([string] $t) {
   if ($hit) { $hit.Id }
 }
 
+function Find-Adb {
+  $cmd = Get-Command adb -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  $sdks = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT)
+  if ($env:LOCALAPPDATA) { $sdks += Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+  if ($HOME) { $sdks += (Join-Path $HOME 'Library/Android/sdk'), (Join-Path $HOME 'Android/Sdk') }
+  foreach ($sdk in $sdks | Where-Object { $_ }) {
+    foreach ($exe in 'adb.exe', 'adb') {
+      $p = Join-Path (Join-Path $sdk 'platform-tools') $exe
+      if (Test-Path $p -PathType Leaf) { return $p }
+    }
+  }
+}
+
+# Device id (e.g. emulator-5554) of a running Android emulator whose AVD is $avd.
+# Flutter lists running AVDs by model name, so ask each emulator for its AVD name.
+function Find-RunningAvd([string] $avd) {
+  $adb = Find-Adb
+  if (-not $adb) { return }
+  foreach ($d in Get-RunningDevices | Where-Object { $_.Id -like 'emulator-*' }) {
+    $name = @(& $adb -s $d.Id emu avd name 2>$null)
+    if ($name.Count -and "$($name[0])".Trim() -ieq $avd) { return $d.Id }
+  }
+}
+
 function Show-Targets {
   Write-Host '== Running / connected devices =='
   foreach ($d in Get-RunningDevices) { Write-Host ('  {0,-34} id: {1}' -f $d.Name, $d.Id) }
@@ -108,6 +133,11 @@ if ($sim) {
 # 3. A launchable emulator (Android AVD, or the generic iOS simulator).
 $emu = Get-EmulatorIds | Where-Object { $_ -ieq $Target } | Select-Object -First 1
 if ($emu) {
+  $running = Find-RunningAvd $emu
+  if ($running) {
+    Write-Host "-> Emulator $emu is already running"
+    Invoke-FlutterRun $running
+  }
   $before = @(Get-RunningDevices | ForEach-Object { $_.Id })
   Write-Host "-> Launching emulator $emu (waiting up to 3 min)..."
   flutter emulators --launch $emu | Out-Null
