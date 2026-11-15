@@ -52,14 +52,19 @@ scripts/run.sh macos --release
 ```
 
 These helpers, `flutter run` and `flutter build` always sign Android builds with
-the debug key. Only the release script uses the release key:
+the debug key. Only release builds use the release key.
+
+**To publish a release** for Android, macOS and Windows, bump the version in
+`pubspec.yaml`, add a matching `CHANGELOG.md` section, then push a commit whose
+whole message is `release` to `main`:
 
 ```sh
-scripts/release.sh             # build + verify a release-signed APK into dist/
-scripts/release.sh --publish   # ...and create the GitHub release
+git commit --allow-empty -m release && git push origin main
 ```
 
-See [Android release guide](docs/ANDROID-RELEASE.md).
+GitHub Actions builds all three platforms and creates release `v<version>`.
+`scripts/release.sh` still builds the signed APK locally. See
+[release guide](docs/ANDROID-RELEASE.md).
 
 ## Stage 1 workflow
 

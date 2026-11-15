@@ -4,8 +4,10 @@ How to sign, build and publish the My Little CRM Android APK so users can
 download and install it directly (sideloading).
 
 **Quick version:** bump `pubspec.yaml`, add a `CHANGELOG.md` section, commit and
-push, then run `scripts/release.sh --publish`. Everything else here explains
-the setup behind that.
+push, then push a commit whose whole message is `release` to `main`. GitHub
+Actions builds Android, macOS and Windows and publishes the release (see
+[Automated release](#4a-automated-release-all-platforms)). Everything else here
+explains the setup behind that.
 
 ## 1. Release keystore (one-off; already done)
 
@@ -129,6 +131,57 @@ To check an APK by hand:
 ~/Library/Android/sdk/build-tools/<version>/apksigner verify --print-certs dist/my-little-crm-<version>.apk
 ```
 
+## 4a. Automated release (all platforms)
+
+`.github/workflows/release.yml` runs on every push to `main` but only does
+anything when the pushed head commit's message is exactly `release` (any
+case). You can also start it by hand from the **Actions** tab on `main`.
+
+```bash
+# after bumping pubspec.yaml and adding the CHANGELOG.md section:
+git commit --allow-empty -m release
+git push origin main
+```
+
+If you merge through a PR, the head commit is the merge commit, so use
+**Squash and merge** with the title `release`, or push the `release` commit to
+`main` after merging.
+
+It:
+
+1. Reads the version from `pubspec.yaml`, fails if release `v<version>` already
+   exists, and takes the `## [<version>]` section of `CHANGELOG.md` as release
+   notes (fails if there isn't one).
+2. Builds in parallel, from that commit:
+   - **Android**: release-signed universal APK, checked with `apksigner`
+     (fails if signed with the debug key)
+   - **macOS**: universal `.app`, zipped with `ditto`. It's ad-hoc signed, not
+     notarized, so users must choose **Open Anyway** the first time.
+   - **Windows**: x64 release folder, zipped. It's unsigned, so SmartScreen may warn.
+3. Creates release `v<version>` on that commit with
+   `my-little-crm-<version>-android.apk`, `-macos.zip`, `-windows-x64.zip`,
+   a `.sha256` for each, and the notes plus install steps.
+
+### One-off: add the signing key as repository secrets
+
+The Android job needs the release keystore. Add these under **Settings →
+Secrets and variables → Actions** (or with `gh`):
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the `.jks` file, base64-encoded |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_KEY_ALIAS` | `mylittlecrm` (optional; this is the default) |
+
+```bash
+base64 -i ~/.android-keys/mylittlecrm-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD   # prompts for the value
+gh secret set ANDROID_KEY_ALIAS --body mylittlecrm
+```
+
+The workflow writes the keystore and `android/key.properties` to the runner,
+builds with `MLC_RELEASE_SIGNING=1`, then deletes both.
+
 ## 5. Google Play (app bundle)
 
 Google Play only accepts an Android App Bundle (`.aab`), not an APK. Build it
@@ -143,7 +196,8 @@ The script release-signs the bundle and **stops if its signing certificate
 isn't the same as the APK's**, so the bundle can't end up debug-signed. It writes
 `dist/my-little-crm-<version>.aab` and a `.sha256` checksum. The `.aab` is never
 attached to the GitHub release, because phones can't install it. Upload it in
-Play Console by hand.
+Play Console by hand. The automated `release` workflow (section 4a) doesn't
+build the bundle either, so run this locally.
 
 - **Version code:** Play rejects a bundle whose build number (after `+` in
   `pubspec.yaml`) it has already received. Bump it for every upload, including
