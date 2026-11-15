@@ -12,3 +12,6 @@ devtools_options.yaml
 
 # Release artifacts from scripts/release.sh
 /dist/
+
+# Widget Preview related
+.widget_preview/
