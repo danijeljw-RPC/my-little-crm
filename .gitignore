@@ -6,6 +6,7 @@ build/
 devtools_options.yaml
 .flutter-plugins-dependencies
 .DS_Store
+notes.txt
 
 # claude
 .claude/
