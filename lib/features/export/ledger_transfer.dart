@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/date_format.dart';
 import '../../domain/crm_service.dart';
 import '../../domain/ledger.dart';
+import 'history_export_service.dart';
 
 /// "Export everything" and its matching import (#37): a stopgap for moving to
 /// a new device until encrypted backup arrives.
@@ -72,6 +75,84 @@ class LedgerTransfer {
       messenger.showSnackBar(
         const SnackBar(content: Text('Could not export. Please try again.')),
       );
+    }
+  }
+
+  /// "Export everything" as a readable PDF report (#52). It is not encrypted
+  /// and cannot be imported; only the JSON export can.
+  Future<void> exportEverythingPdf(BuildContext context) async {
+    final exporter = HistoryExportService(
+      service,
+      clock: service.clock,
+      dateFormat: AppDateFormat.of(context),
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        title: const Text('Export everything as PDF?'),
+        content: const Text(HistoryExportService.reportNotice),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Create PDF report'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    void say(String text) =>
+        messenger.showSnackBar(SnackBar(content: Text(text)));
+    // A large ledger takes a while; the layout itself runs off the UI thread.
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 24),
+                Expanded(child: Text('Creating PDF report…')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    ExportDocument? file;
+    try {
+      file = await exporter.exportLedgerPdf();
+    } on StateError catch (error) {
+      say(error.message);
+    } on PdfPageLimitException catch (error) {
+      say(error.message);
+    } catch (_) {
+      say('Could not create the PDF. Please try again.');
+    } finally {
+      navigator.pop();
+    }
+    if (file == null) return;
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Save PDF report',
+        fileName: file.name,
+        bytes: file.bytes,
+        mimeType: 'application/pdf',
+      );
+      if (saved != null) {
+        say('Saved PDF report (not encrypted, not importable)');
+      }
+    } catch (_) {
+      say('Could not save the PDF. Please try again.');
     }
   }
 

@@ -5,8 +5,11 @@
 #   scripts/run.sh "<name or id>"       run there (boots simulators/emulators if needed)
 #   scripts/run.sh "<target>" --release extra args go straight to `flutter run`
 #
-# Examples: scripts/run.sh macos | scripts/run.sh chrome | scripts/run.sh "iPhone 18 Pro"
+# Examples: scripts/run.sh macos | scripts/run.sh "iPhone 18 Pro"
 #           scripts/run.sh swoovr-pixel | scripts/run.sh R9WW30CSG1K
+#
+# Web (chrome, edge, web-server) is refused: the app needs native SQLite and
+# shows a blank screen in a browser. Web support is tracked in #30.
 
 set -euo pipefail
 cd "${0:A:h}/.."
@@ -110,7 +113,19 @@ list_targets() {
     if [[ -n ${sims[1]:-} ]]; then for line in $sims; do print "  ${line%%|*}"; done; else print "  (none)"; fi
   fi
   print "\nUsage: scripts/run.sh \"<name or id>\" [flutter run args]"
-  print "   eg: scripts/run.sh macos   scripts/run.sh chrome   scripts/run.sh \"iPhone 18 Pro\""
+  print "   eg: scripts/run.sh macos   scripts/run.sh \"iPhone 18 Pro\"   scripts/run.sh linux"
+}
+
+# Refuse browser targets with an explanation instead of a blank screen (#30).
+reject_web() {
+  case ${1:l} in
+    chrome|edge|web|web-server|*browser*)
+      print -u2 "error: \"$1\" is a web target, and My Little CRM does not run in a browser yet."
+      print -u2 "       It stores data in native SQLite, which isn't available on the web,"
+      print -u2 "       so it starts to a blank screen. Web support is tracked in issue #30."
+      print -u2 "       Run a desktop, simulator or device target instead, e.g. scripts/run.sh macos"
+      exit 2;;
+  esac
 }
 
 if (( $# == 0 )); then
@@ -119,9 +134,11 @@ if (( $# == 0 )); then
 fi
 
 target=$1; shift
+reject_web "$target"
 
 # 1. Already running or connected.
 if device=$(find_running "$target"); then
+  reject_web "$device"
   print "▶ Running on $device"
   exec flutter run -d "$device" "$@"
 fi

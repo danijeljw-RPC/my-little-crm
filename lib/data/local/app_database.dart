@@ -21,8 +21,7 @@ class AppDatabase {
         ? native.databaseFactory
         : databaseFactoryFfi;
     if (useFfi || Platform.isWindows || Platform.isLinux) sqfliteFfiInit();
-    final location =
-        path ?? '${(await getApplicationSupportDirectory()).path}/crm.sqlite';
+    final location = path ?? await defaultPath();
     await Directory(File(location).parent.path).create(recursive: true);
     final database = await factory.openDatabase(
       location,
@@ -42,6 +41,28 @@ class AppDatabase {
     );
     return AppDatabase._(database);
   }
+
+  /// The live database's file name. Changing it (or [defaultPath]) would
+  /// leave existing users' data behind, so both are pinned by tests (#54).
+  static const fileName = 'crm.sqlite';
+
+  /// Where the live database lives: the app's private, persistent Application
+  /// Support directory, resolved by path_provider at run time (#54):
+  ///
+  /// - macOS (sandboxed): `~/Library/Containers/<bundle id>/Data/Library/`
+  ///   `Application Support/<bundle id>/`
+  /// - iOS: `<app container>/Library/Application Support/`
+  /// - Android: `/data/data/<applicationId>/files/`
+  /// - Windows: `%APPDATA%\<CompanyName>\<ProductName>\`
+  /// - Linux: `$XDG_DATA_HOME` (`~/.local/share`)`/<APPLICATION_ID>/`
+  ///
+  /// Never inside the app bundle, so it survives updates and reinstalls of
+  /// new release builds. User-chosen locations are only for exports.
+  @visibleForTesting
+  static Future<String> defaultPath({
+    Future<Directory> Function() supportDirectory =
+        getApplicationSupportDirectory,
+  }) async => '${(await supportDirectory()).path}/$fileName';
 
   static Future<AppDatabase> inMemory() async {
     sqfliteFfiInit();

@@ -208,9 +208,11 @@ class _InteractionHomeState extends State<InteractionHome> {
         actions: [
           PopupMenuButton<String>(
             tooltip: 'More options',
-            onSelected: (value) => value == 'export'
-                ? transfer.exportEverything(context)
-                : transfer.importExport(context),
+            onSelected: (value) => switch (value) {
+              'export' => transfer.exportEverything(context),
+              'export-pdf' => transfer.exportEverythingPdf(context),
+              _ => transfer.importExport(context),
+            },
             itemBuilder: (_) => const [
               PopupMenuItem(
                 value: 'export',
@@ -218,6 +220,16 @@ class _InteractionHomeState extends State<InteractionHome> {
                   leading: Icon(Icons.download_outlined),
                   title: Text('Export everything (JSON)'),
                   subtitle: Text('Not encrypted'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'export-pdf',
+                child: ListTile(
+                  leading: Icon(Icons.picture_as_pdf_outlined),
+                  title: Text('Export everything (PDF)'),
+                  subtitle: Text(
+                    'Readable report · not encrypted or importable',
+                  ),
                 ),
               ),
               PopupMenuItem(

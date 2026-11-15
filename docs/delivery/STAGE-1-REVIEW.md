@@ -198,3 +198,24 @@ acceptance remains with #7.
   lazy home paging.
 - `flutter test integration_test/core_journey_test.dart -d macos`: all 3 native
   tests passed.
+
+## v1.1.1 — 16 November 2026
+
+Milestone v1.1.1 is a maintenance release. The core-local plan's steps are now
+ticked, with an "As built" section recording the sqflite, constructor-injection
+and Navigator choices (#40). The open Stage 1 gaps are linked from that plan:
+#7 for platform and native-export acceptance, and #30 for web.
+
+- #52 whole-ledger PDF report. The benchmark above now also generates it from
+  the same 50,000-interaction, 2,000-party ledger: **11.1 s** for a 21 MB PDF
+  on the Apple-silicon Mac. The layout runs on a background isolate behind a
+  progress dialog, so the UI stays responsive. pdf's `MultiPage.maxPages` is
+  only checked in debug builds, so each party's page count is checked
+  explicitly (10,000 pages). If a party goes over, the export fails with a clear
+  error and writes no truncated file.
+- #54 storage review: the database location and the macOS App Sandbox were
+  already correct, so nothing moved. See "Where the database lives" in
+  `docs/PLATFORM-SETTINGS.md`.
+- #8 dependencies: removed the unused `flutter_riverpod`, `go_router` and
+  `cupertino_icons`, and refreshed the lockfile. Intentional holds are listed
+  in `docs/DEPENDENCIES.md`.

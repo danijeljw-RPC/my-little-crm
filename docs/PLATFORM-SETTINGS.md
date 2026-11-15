@@ -163,11 +163,48 @@ example `1.0.0+15`, or override it per build with
 | Windows | `FileVersion` / `ProductVersion` major.minor.patch | build part |
 | Linux | — | — |
 
+## Where the database lives
+
+The live ledger is one SQLite file, `crm.sqlite`, in the app's private
+Application Support directory. `AppDatabase.defaultPath()` in
+`lib/data/local/app_database.dart` resolves it at run time with
+`path_provider`'s `getApplicationSupportDirectory()`; nothing is hardcoded and
+nothing is stored inside the app bundle, so the file survives app updates and
+new release builds (reviewed in #54).
+
+| Platform | Resolved folder | Comes from |
+| --- | --- | --- |
+| macOS (App Sandbox) | `~/Library/Containers/com.repasscloud.mylittlecrm/Data/Library/Application Support/com.repasscloud.mylittlecrm/` | bundle ID |
+| iOS | `<app container>/Library/Application Support/` | app container |
+| Android | `/data/data/com.repasscloud.mylittlecrm/files/` | `applicationId` |
+| Windows | `%APPDATA%\RePass Cloud Pty Ltd\My Little CRM\` (Roaming) | `CompanyName` + `ProductName` in `Runner.rc` |
+| Linux | `$XDG_DATA_HOME/com.repasscloud.mylittlecrm/` (default `~/.local/share/…`) | `APPLICATION_ID` |
+
+The ID values in the right-hand column are **part of the database path**.
+Renaming one moves where the app looks, so existing users would see an
+empty ledger. A rename needs a migration that copies the old file first.
+
+macOS sandbox entitlements (`macos/Runner/*.entitlements`) are
+`app-sandbox` plus `files.user-selected.read-write`, which the native save and
+open pickers use for exports and imports. Debug/Profile also has `allow-jit`
+and `network.server`, which Flutter needs for hot reload and debugging. There are no
+temporary exceptions, so the Release entitlements are acceptable for Mac App
+Store review. `test/platform/storage_location_test.dart` guards the file name,
+the resolver and the entitlements.
+
+Data persistence across updates depends on the update being the *same app* to
+the OS: the same bundle ID / applicationId and, on Android, the same signing
+key. On macOS, GitHub release builds are currently ad-hoc signed
+(`CODE_SIGN_IDENTITY = "-"`). The container keeps the data, but macOS 14+
+can ask the user to allow an app with a different signature to access it.
+Developer ID or Mac App Store signing with a fixed Team ID avoids this.
+
 ## Tests and CI tied to these settings
 
 | Test | What it depends on | Update when |
 | --- | --- | --- |
 | `test/platform/platform_identity_test.dart` | every value in this guide | you change an app ID, display name, company or binary name: update the constants at the top |
+| `test/platform/storage_location_test.dart` | database file name and resolver, macOS entitlements | you move the database or change entitlements (needs a data migration) |
 | `test/app_test.dart` | `'My Little CRM'` app-bar text in `lib/app.dart` | the in-app title changes |
 | `macos/RunnerTests` (XCTest) | `TEST_HOST` → `PRODUCT_NAME`; test bundle ID | `PRODUCT_NAME` or the bundle ID changes |
 | `ios/RunnerTests` (XCTest) | test bundle ID | the bundle ID changes |

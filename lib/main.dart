@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'data/local/app_database.dart';
@@ -16,5 +15,5 @@ Future<void> main() async {
     interactions: LocalInteractionRepository(database),
     clock: const SystemClock(),
   );
-  runApp(ProviderScope(child: MyLittleCrmApp(service: service)));
+  runApp(MyLittleCrmApp(service: service));
 }

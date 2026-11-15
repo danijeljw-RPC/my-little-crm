@@ -4,6 +4,36 @@ All notable changes to My Little CRM are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-11-16
+
+A printable report of the whole ledger, plus maintenance.
+
+### Added
+
+- **Export everything as PDF**: one readable report of every party, ordered
+  by name, with its full history. The report opens with a contents section,
+  and each party starts on a new page. It is **not encrypted** and **cannot
+  be imported**; only the JSON export can be imported. The app says so
+  before saving. Large ledgers are laid out in the background with a
+  progress dialog (about 11 s for 50,000 interactions). If some text can't
+  be drawn in the PDF, the message names the party it is in.
+
+### Changed
+
+- Removed unused packages (`flutter_riverpod`, `go_router`,
+  `cupertino_icons`) and updated the others to their latest compatible
+  versions. `docs/DEPENDENCIES.md` lists the versions held back on purpose.
+- `scripts/run.sh` and `scripts/run.ps1` now refuse web targets such as
+  `chrome` with an explanation, instead of starting to a blank screen. Web
+  support is planned separately.
+
+### Verified
+
+- The database stays in each platform's private Application Support folder,
+  outside the app bundle, and the macOS app is sandboxed with no exceptions.
+  Nothing moved; existing data is untouched. See "Where the database lives" in
+  `docs/PLATFORM-SETTINGS.md`.
+
 ## [1.1.0] - 2026-11-16
 
 Record management, a desktop and tablet layout, and a full export for moving
@@ -94,5 +124,6 @@ then, your device's own security protects the local database.
 3. Open the file and tap **Install**. Play Protect may warn about an unknown
    developer; this is expected for apps installed outside Google Play.
 
+[1.1.1]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.1.0
 [1.0.0]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.0.0

@@ -5,9 +5,10 @@
 .EXAMPLE
   .\scripts\run.ps1                       # list everything you can run on
   .\scripts\run.ps1 windows               # run there
-  .\scripts\run.ps1 chrome
   .\scripts\run.ps1 "swoovr-pixel"        # launches the Android emulator first
-  .\scripts\run.ps1 edge --release        # extra args go straight to `flutter run`
+  .\scripts\run.ps1 windows --release     # extra args go straight to `flutter run`
+
+  Web targets (chrome, edge, web-server) are refused until web support lands (#30).
 #>
 # Deliberately a simple (non-advanced) script: no [Parameter()] attributes, so PowerShell
 # doesn't claim --debug / --verbose as its own common parameters and they reach flutter.
@@ -103,10 +104,22 @@ function Show-Targets {
     if ($sims.Count) { $sims | ForEach-Object { Write-Host "  $($_.Name)" } } else { Write-Host '  (none)' }
   }
   Write-Host "`nUsage: .\scripts\run.ps1 `"<name or id>`" [flutter run args]"
-  Write-Host '   eg: .\scripts\run.ps1 windows   .\scripts\run.ps1 chrome   .\scripts\run.ps1 "swoovr-pixel"'
+  Write-Host '   eg: .\scripts\run.ps1 windows   .\scripts\run.ps1 "swoovr-pixel"'
+}
+
+# Refuse browser targets with an explanation instead of a blank screen (#30).
+function Assert-NotWeb([string] $t) {
+  if ($t -match '^(chrome|edge|web|web-server)$' -or $t -match 'browser') {
+    [Console]::Error.WriteLine("error: `"$t`" is a web target, and My Little CRM does not run in a browser yet.")
+    [Console]::Error.WriteLine('       It stores data in native SQLite, which isn''t available on the web,')
+    [Console]::Error.WriteLine('       so it starts to a blank screen. Web support is tracked in issue #30.')
+    [Console]::Error.WriteLine('       Run a desktop, emulator or device target instead, e.g. .\scripts\run.ps1 windows')
+    exit 2
+  }
 }
 
 function Invoke-FlutterRun([string] $id) {
+  Assert-NotWeb $id
   Write-Host "-> Running on $id"
   & flutter run -d $id @FlutterArgs
   exit $LASTEXITCODE
@@ -116,6 +129,8 @@ if (-not $Target) {
   Show-Targets
   exit 0
 }
+
+Assert-NotWeb $Target
 
 # 1. Already running or connected.
 $device = Find-Running $Target
