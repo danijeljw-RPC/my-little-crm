@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../core/clock.dart';
 import 'ledger.dart';
 import 'models.dart';
+import 'models.dart' as models show ledgerNotEmptyMessage;
 import 'repositories.dart';
 
 class CrmService {
@@ -190,33 +191,19 @@ class CrmService {
     interactions: await interactions.all(),
   );
 
-  /// Loads a full-ledger export into an empty database. Refuses to merge into
-  /// existing records; on failure, removes whatever it had written.
+  /// Loads a full-ledger export into an empty database, atomically. Refuses
+  /// to merge into existing records.
   Future<void> importLedger(LedgerSnapshot ledger) async {
-    if ((await parties.list()).isNotEmpty || await interactions.count() > 0) {
-      throw StateError(ledgerNotEmptyMessage);
-    }
     final knownParties = {for (final p in ledger.parties) p.id};
     if (ledger.interactions.any((i) => !knownParties.contains(i.partyId))) {
       throw const FormatException('An interaction refers to a missing party');
     }
-    final written = <PartyId>[];
-    try {
-      for (final party in ledger.parties) {
-        await parties.restore(party);
-        written.add(party.id);
-      }
-      await interactions.saveAll(ledger.interactions);
-    } catch (_) {
-      for (final id in written) {
-        await parties.delete(id);
-      }
-      rethrow;
-    } finally {
-      _changed();
-    }
+    await interactions.importAll(
+      parties: ledger.parties,
+      interactions: ledger.interactions,
+    );
+    _changed();
   }
 
-  static const ledgerNotEmptyMessage =
-      'Import only works on an empty ledger. Delete existing records first.';
+  static const ledgerNotEmptyMessage = models.ledgerNotEmptyMessage;
 }

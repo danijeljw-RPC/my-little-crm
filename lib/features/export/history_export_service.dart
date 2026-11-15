@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -25,8 +26,39 @@ class HistoryExportService {
 
   /// Formats dates in PDF reports; without one, ISO 8601 UTC is used.
   final AppDateFormat? dateFormat;
-  String _when(DateTime value) =>
-      dateFormat?.fullDateTime(value) ?? value.toUtc().toIso8601String();
+
+  /// A date and time for the PDF, in the user's locale when the bundled font
+  /// can draw it, otherwise in en_US (e.g. Japanese 年/月/日 have no glyphs).
+  @visibleForTesting
+  String pdfDateTime(DateTime value) => _pdfSafe(
+    (format) => format.fullDateTime(value),
+    () => value.toUtc().toIso8601String(),
+  );
+
+  /// A day-only date for the PDF, with the same font fallback.
+  @visibleForTesting
+  String pdfDate(DateTime value) => _pdfSafe(
+    (format) => format.fullDate(value),
+    () => value.toUtc().toIso8601String(),
+  );
+
+  String _pdfSafe(
+    String Function(AppDateFormat format) render,
+    String Function() noFormat,
+  ) {
+    final format = dateFormat;
+    if (format == null) return noFormat();
+    final localized = render(format);
+    if (_isPdfTextSupported(localized)) return localized;
+    return render(
+      AppDateFormat(
+        locale: 'en_US',
+        use24HourFormat: format.use24HourFormat,
+        now: format.now,
+      ),
+    );
+  }
+
   static const unsupportedPdfTextMessage =
       'PDF export cannot safely display every character in this history. '
       'Choose JSON instead.';
@@ -145,7 +177,7 @@ class HistoryExportService {
           for (final i in items) ...[
             pw.Header(
               level: 1,
-              text: '${_when(i.timestamp)} - ${i.method.name}',
+              text: '${pdfDateTime(i.timestamp)} - ${i.method.name}',
             ),
             pw.Text(i.summary, overflow: pw.TextOverflow.span),
             if (i.contactName != null)
@@ -166,7 +198,7 @@ class HistoryExportService {
             if (i.followUp != null)
               pw.Paragraph(
                 text:
-                    'Follow-up: ${i.followUp!.hasTime ? _when(i.followUp!.dueAt) : dateFormat?.fullDate(i.followUp!.dueAt) ?? i.followUp!.dueAt.toUtc().toIso8601String()} (${i.followUp!.status.name})',
+                    'Follow-up: ${i.followUp!.hasTime ? pdfDateTime(i.followUp!.dueAt) : pdfDate(i.followUp!.dueAt)} (${i.followUp!.status.name})',
               ),
             pw.Paragraph(
               text:
@@ -197,15 +229,15 @@ class HistoryExportService {
         if (item.commitment != null) item.commitment!,
       ],
     ];
-    if (text.any(
-      (value) =>
-          value.runes.any((codePoint) => !_isPdfCodePointSupported(codePoint)),
-    )) {
+    if (text.any((value) => !_isPdfTextSupported(value))) {
       throw StateError(unsupportedPdfTextMessage);
     }
   }
 
-  bool _isPdfCodePointSupported(int codePoint) =>
+  static bool _isPdfTextSupported(String value) =>
+      value.runes.every(_isPdfCodePointSupported);
+
+  static bool _isPdfCodePointSupported(int codePoint) =>
       codePoint == 0x09 ||
       codePoint == 0x0a ||
       _pdfSupportedCodePointRanges.any(

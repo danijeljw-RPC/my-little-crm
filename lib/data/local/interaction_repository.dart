@@ -36,4 +36,9 @@ class LocalInteractionRepository implements InteractionRepository {
   Future<List<Interaction>> all() => _database.allInteractions();
   @override
   Future<void> delete(InteractionId id) => _database.deleteInteraction(id);
+  @override
+  Future<void> importAll({
+    required List<Party> parties,
+    required List<Interaction> interactions,
+  }) => _database.importLedger(parties: parties, interactions: interactions);
 }

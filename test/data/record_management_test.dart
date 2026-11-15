@@ -342,6 +342,50 @@ void main() {
       );
     });
 
+    test(
+      'a failure part-way through import keeps nothing (one transaction)',
+      () async {
+        final (db, service) = await _open();
+        final good = Interaction(
+          id: 'ok',
+          partyId: 'p',
+          summary: 'Imported',
+          timestamp: DateTime.utc(2026),
+          createdAt: DateTime.utc(2026),
+        );
+        // Bypass service validation: the second row violates the foreign key
+        // after the parties and first interaction were already written.
+        await expectLater(
+          db.importLedger(
+            parties: const [
+              Party(id: 'p', name: 'P'),
+              Party(id: 'q', name: 'Q'),
+            ],
+            interactions: [
+              good,
+              Interaction(
+                id: 'orphan',
+                partyId: 'missing',
+                summary: 'Broken',
+                timestamp: DateTime.utc(2026),
+                createdAt: DateTime.utc(2026),
+              ),
+            ],
+          ),
+          throwsA(anything),
+        );
+        expect(await service.parties.list(), isEmpty);
+        expect(await service.interactions.count(), 0);
+        expect(await db.debugCount('interaction_search'), 0);
+        // The ledger is still empty, so a corrected import is accepted.
+        await db.importLedger(
+          parties: const [Party(id: 'p', name: 'P')],
+          interactions: [good],
+        );
+        expect((await service.searchInteractions('Imported')).single.id, 'ok');
+      },
+    );
+
     test('rejects other JSON and rolls back a broken import', () async {
       expect(
         () => LedgerSnapshot.fromJson('{"schemaVersion": 1}'),

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:my_little_crm/core/date_format.dart';
 import 'package:my_little_crm/core/clock.dart';
 import 'package:my_little_crm/domain/crm_service.dart';
 import 'package:my_little_crm/domain/models.dart';
@@ -214,4 +215,47 @@ void main() {
       expect(pdf.bytes.length, greaterThan(1000));
     },
   );
+
+  group('localized PDF dates (font coverage)', () {
+    final at = DateTime(2026, 11, 17, 14, 5);
+    HistoryExportService exporter(String locale) => HistoryExportService(
+      CrmService.inMemory(),
+      dateFormat: AppDateFormat(
+        locale: locale,
+        use24HourFormat: true,
+        now: DateTime(2026, 11, 15),
+      ),
+    );
+
+    test('falls back to en_US when the font lacks the locale glyphs', () {
+      expect(exporter('ja').pdfDateTime(at), 'Tue, Nov 17, 2026 14:05');
+      expect(exporter('zh_CN').pdfDate(at), 'Tue, Nov 17, 2026');
+    });
+
+    test('keeps supported locales', () {
+      expect(exporter('de_DE').pdfDateTime(at), 'Di., 17. Nov. 2026 14:05');
+      expect(exporter('en_AU').pdfDate(at), 'Tue, 17 Nov 2026');
+    });
+
+    test('a Japanese-locale history still exports', () async {
+      final service = CrmService.inMemory();
+      final item = await service.createInteraction(
+        CreateInteractionCommand(
+          partyName: 'BrightSure',
+          summary: 'ASCII only',
+          timestamp: at.toUtc(),
+          followUpDueAt: DateTime(2026, 11, 20).toUtc(),
+        ),
+      );
+      final pdf = await HistoryExportService(
+        service,
+        dateFormat: AppDateFormat(
+          locale: 'ja',
+          use24HourFormat: true,
+          now: DateTime(2026, 11, 15),
+        ),
+      ).exportPdf(item.partyId);
+      expect(pdf.bytes, isNotEmpty);
+    });
+  });
 }

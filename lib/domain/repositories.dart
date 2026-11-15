@@ -35,6 +35,14 @@ abstract interface class InteractionRepository {
   Future<int> countForParty(PartyId partyId);
   Future<int> count();
 
+  /// Inserts every party and interaction into an empty ledger as one atomic
+  /// operation: if anything fails (or the app stops) nothing is kept. Throws a
+  /// [StateError] with [ledgerNotEmptyMessage] if any record already exists.
+  Future<void> importAll({
+    required List<Party> parties,
+    required List<Interaction> interactions,
+  });
+
   /// Every interaction, oldest first (used by full-ledger export).
   Future<List<Interaction>> all();
   Future<void> delete(InteractionId id);
@@ -156,6 +164,22 @@ class MemoryInteractionRepository implements InteractionRepository {
       _items.values.toList()..sort((a, b) => -_newestFirst(a, b));
   @override
   Future<void> delete(InteractionId id) async => _items.remove(id);
+
+  @override
+  Future<void> importAll({
+    required List<Party> parties,
+    required List<Interaction> interactions,
+  }) async {
+    final store = this.parties;
+    if (store == null) throw StateError('Link a party repository to import');
+    if (_items.isNotEmpty || (await store.list()).isNotEmpty) {
+      throw StateError(ledgerNotEmptyMessage);
+    }
+    for (final party in parties) {
+      await store.restore(party);
+    }
+    await saveAll(interactions);
+  }
 
   void _reassign(PartyId source, PartyId target) {
     for (final item in _items.values.toList()) {

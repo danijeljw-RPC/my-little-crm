@@ -284,6 +284,27 @@ class AppDatabase {
   Future<Interaction> saveInteraction(Interaction input) =>
       _database.transaction((transaction) => _write(transaction, input));
 
+  /// Imports a whole ledger in one transaction. The emptiness check runs
+  /// inside it too, so an interrupted or failed import leaves nothing behind.
+  Future<void> importLedger({
+    required List<Party> parties,
+    required List<Interaction> interactions,
+  }) => _database.transaction((transaction) async {
+    final existing = await transaction.rawQuery(
+      'SELECT (SELECT COUNT(*) FROM parties) + '
+      '(SELECT COUNT(*) FROM interactions) AS n',
+    );
+    if ((existing.single['n']! as int) > 0) {
+      throw StateError(ledgerNotEmptyMessage);
+    }
+    for (final party in parties) {
+      await _insertParty(party, transaction);
+    }
+    for (final item in interactions) {
+      await _write(transaction, item);
+    }
+  });
+
   /// Saves many interactions in one transaction: all or nothing.
   Future<void> saveInteractions(List<Interaction> items) =>
       _database.transaction((transaction) async {

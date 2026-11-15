@@ -148,6 +148,10 @@ class UpdateInteractionCommand {
   final String? targetPartyName;
 }
 
+/// Why an import was refused: imports only go into an empty ledger.
+const ledgerNotEmptyMessage =
+    'Import only works on an empty ledger. Delete existing records first.';
+
 /// Thrown when a rename would collide with another party's name.
 class PartyNameConflict implements Exception {
   const PartyNameConflict(this.existing);
