@@ -122,28 +122,9 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          # Newest build-tools that actually ships apksigner (as scripts/release.sh does).
-          apksigner=""
-          for dir in $(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -Vr); do
-            if [[ -x ${dir}apksigner ]]; then apksigner=${dir}apksigner; break; fi
-          done
-          [[ -n $apksigner ]] || { echo "::error::apksigner not found under $ANDROID_HOME/build-tools"; exit 1; }
-          echo "Using $apksigner ($("$apksigner" --version))"
-          apk=build/app/outputs/flutter-apk/app-release.apk
-          # Keep apksigner's own output and exit status so a failure explains itself.
-          if ! certs=$("$apksigner" verify --print-certs "$apk" 2>&1); then
-            echo "$certs"
-            echo "::error::apksigner verify failed for $apk"; exit 1
-          fi
-          echo "$certs" | grep -v -i 'public key' || true
-          # "Signer #1 certificate DN:" or, for SDK-ranged signers,
-          # "Signer (minSdkVersion=…) certificate DN:".
-          signer=$(echo "$certs" | sed -n 's/^Signer.*certificate DN: //p' | head -1)
-          echo "Signer: $signer"
-          [[ -n $signer ]] || { echo "::error::could not read the APK signer from the output above"; exit 1; }
-          [[ $signer != *"CN=Android Debug"* ]] || { echo "::error::APK is signed with the DEBUG key"; exit 1; }
+          scripts/ci/verify-apk.sh build/app/outputs/flutter-apk/app-release.apk
           mkdir -p dist
-          cp "$apk" "dist/my-little-crm-$VERSION-android.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/my-little-crm-$VERSION-android.apk"
       - name: Remove keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks" android/key.properties
