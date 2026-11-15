@@ -71,9 +71,16 @@ GitHub Actions builds all three platforms and creates release `v<version>`.
 Record a company or person, communication method, date, summary, and optional
 contact, references, commitment, and follow-up. Parties group interactions into
 newest-first histories. Search finds notes, names, contacts, and references.
-Complete follow-ups from the outstanding list; their records remain in history.
-Open a party history to export its complete chronological history as PDF or JSON
-through the native save dialog.
+Complete follow-ups from the outstanding list, grouped into overdue, due today
+and upcoming; their records remain in history. Open a party history to export its
+complete chronological history as PDF or JSON through the native save dialog, or
+to rename, merge or delete the party. Interactions can be moved to another party
+or deleted (with undo). On tablets and desktop windows the app uses a navigation
+rail and shows lists and details side by side.
+
+**Export everything** (top-right menu) writes every party and interaction to one
+versioned JSON file, which can be imported into an empty ledger on a new device.
+That file is **not encrypted**.
 
 The primary SQLite database stays in the application's support directory. Core
 recording, search, follow-ups, and export generation work offline without an
@@ -107,6 +114,10 @@ protection to require both of its checks before merging:
 
 - `Flutter validation / Analyze and unit tests`
 - `Flutter validation / macOS integration`
+- `Flutter validation / Linux integration`
+
+The large-ledger benchmark is not part of CI; run it with
+`flutter test tool/benchmark/ledger_benchmark_test.dart`.
 
 Use an emulator or disposable test device for the integration journey. It creates
 a temporary SQLite database, records three interactions (including one through the editor), searches a partial case
