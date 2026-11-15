@@ -19,4 +19,14 @@ class LocalPartyRepository implements PartyRepository {
   Future<Party?> get(PartyId id) => _database.partyById(id);
   @override
   Future<List<Party>> list() => _database.allParties();
+  @override
+  Future<Party> restore(Party party) => _database.restoreParty(party);
+  @override
+  Future<Party> rename(PartyId id, String name) =>
+      _database.renameParty(id, name.trim());
+  @override
+  Future<void> merge({required PartyId source, required PartyId target}) =>
+      _database.mergeParties(source: source, target: target);
+  @override
+  Future<void> delete(PartyId id) => _database.deleteParty(id);
 }
