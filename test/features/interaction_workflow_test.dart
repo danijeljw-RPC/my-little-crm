@@ -178,8 +178,10 @@ void main() {
 
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Remove follow-up'));
     await tester.tap(find.text('Remove follow-up'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add follow-up date'));
     await tester.tap(find.text('Add follow-up date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('15'));
@@ -265,6 +267,7 @@ void main() {
       find.byKey(const Key('summary')),
       'Revised quote promised',
     );
+    await tester.ensureVisible(find.text('Save interaction'));
     await tester.tap(find.text('Save interaction'));
     await tester.pumpAndSettle();
 

@@ -168,9 +168,11 @@ Future<void> _pumpApp(WidgetTester tester, _Device device) async {
 }
 
 Future<void> _tapTab(WidgetTester tester, String label) async {
-  await tester.tap(
-    find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
-  );
+  // Phones use the bottom NavigationBar; tablets use a NavigationRail (#31).
+  final bar = find.byType(NavigationBar).evaluate().isEmpty
+      ? find.byType(NavigationRail)
+      : find.byType(NavigationBar);
+  await tester.tap(find.descendant(of: bar, matching: find.text(label)));
   await tester.pumpAndSettle();
 }
 

@@ -5,6 +5,7 @@ import 'package:my_little_crm/app.dart';
 void main() {
   testWidgets('shows the My Little CRM home shell', (tester) async {
     await tester.pumpWidget(const MyLittleCrmApp());
+    await tester.pumpAndSettle();
 
     expect(find.text('My Little CRM'), findsOneWidget);
     expect(find.text('No interactions yet'), findsOneWidget);
@@ -24,6 +25,7 @@ void main() {
       find.byKey(const Key('summary')),
       'Revised quote promised',
     );
+    await tester.ensureVisible(find.text('Save interaction'));
     await tester.tap(find.text('Save interaction'));
     await tester.pumpAndSettle();
     expect(find.text('BrightSure Insurance'), findsOneWidget);

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/clock.dart';
+import '../../core/date_format.dart';
 import '../../domain/crm_service.dart';
 import '../../domain/models.dart';
 
@@ -16,7 +17,16 @@ class ExportDocument {
 }
 
 class HistoryExportService {
-  const HistoryExportService(this.service, {this.clock = const SystemClock()});
+  const HistoryExportService(
+    this.service, {
+    this.clock = const SystemClock(),
+    this.dateFormat,
+  });
+
+  /// Formats dates in PDF reports; without one, ISO 8601 UTC is used.
+  final AppDateFormat? dateFormat;
+  String _when(DateTime value) =>
+      dateFormat?.fullDateTime(value) ?? value.toUtc().toIso8601String();
   static const unsupportedPdfTextMessage =
       'PDF export cannot safely display every character in this history. '
       'Choose JSON instead.';
@@ -135,7 +145,7 @@ class HistoryExportService {
           for (final i in items) ...[
             pw.Header(
               level: 1,
-              text: '${i.timestamp.toLocal()} - ${i.method.name}',
+              text: '${_when(i.timestamp)} - ${i.method.name}',
             ),
             pw.Text(i.summary, overflow: pw.TextOverflow.span),
             if (i.contactName != null)
@@ -156,7 +166,7 @@ class HistoryExportService {
             if (i.followUp != null)
               pw.Paragraph(
                 text:
-                    'Follow-up: ${i.followUp!.dueAt.toLocal()} (${i.followUp!.status.name})',
+                    'Follow-up: ${i.followUp!.hasTime ? _when(i.followUp!.dueAt) : dateFormat?.fullDate(i.followUp!.dueAt) ?? i.followUp!.dueAt.toUtc().toIso8601String()} (${i.followUp!.status.name})',
               ),
             pw.Paragraph(
               text:

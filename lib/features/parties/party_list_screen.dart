@@ -5,9 +5,17 @@ import '../../domain/models.dart';
 import 'party_history_screen.dart';
 
 class PartyListScreen extends StatefulWidget {
-  const PartyListScreen({super.key, required this.service, this.onReturn});
+  const PartyListScreen({
+    super.key,
+    required this.service,
+    this.onSelect,
+    this.selectedId,
+  });
   final CrmService service;
-  final Future<void> Function()? onReturn;
+
+  /// Two-pane mode: report the tapped party instead of pushing its history.
+  final ValueChanged<Party>? onSelect;
+  final PartyId? selectedId;
   @override
   State<PartyListScreen> createState() => _PartyListScreenState();
 }
@@ -15,7 +23,26 @@ class PartyListScreen extends StatefulWidget {
 class _PartyListScreenState extends State<PartyListScreen> {
   late Future<List<Party>> _parties = widget.service.parties.list();
   CrmService get service => widget.service;
-  Future<void> Function()? get onReturn => widget.onReturn;
+
+  @override
+  void initState() {
+    super.initState();
+    service.revision.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    service.revision.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {
+      _parties = service.parties.list();
+    });
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<List<Party>>(
     future: _parties,
@@ -26,12 +53,7 @@ class _PartyListScreenState extends State<PartyListScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text('Could not load parties. Please try again.'),
-              TextButton(
-                onPressed: () => setState(() {
-                  _parties = service.parties.list();
-                }),
-                child: const Text('Retry'),
-              ),
+              TextButton(onPressed: _refresh, child: const Text('Retry')),
             ],
           ),
         );
@@ -47,15 +69,21 @@ class _PartyListScreenState extends State<PartyListScreen> {
           for (final party in snapshot.data!)
             ListTile(
               title: Text(party.name),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.of(context).push(
+              selected: party.id == widget.selectedId,
+              trailing: widget.onSelect == null
+                  ? const Icon(Icons.chevron_right)
+                  : null,
+              onTap: () {
+                if (widget.onSelect != null) {
+                  widget.onSelect!(party);
+                  return;
+                }
+                Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) =>
                         PartyHistoryScreen(service: service, party: party),
                   ),
                 );
-                await onReturn?.call();
               },
             ),
         ],
