@@ -10,7 +10,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:my_little_crm/core/clock.dart';
 import 'package:my_little_crm/data/local/app_database.dart';
+import 'package:my_little_crm/domain/crm_service.dart';
+import 'package:my_little_crm/features/export/history_export_service.dart';
 import 'package:my_little_crm/data/local/interaction_repository.dart';
 import 'package:my_little_crm/data/local/party_repository.dart';
 import 'package:my_little_crm/domain/models.dart';
@@ -20,6 +23,8 @@ const interactionCount = 50000;
 const runs = 7;
 
 void main() {
+  // The PDF report loads its font from the asset bundle.
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('large ledger timings', timeout: const Timeout(Duration(minutes: 15)), () async {
     final directory = await Directory.systemTemp.createTemp('crm-bench-');
     addTearDown(() => directory.delete(recursive: true));
@@ -117,5 +122,21 @@ void main() {
       await measure('search "$query"', () => interactions.search(query));
     }
     expect(await interactions.count(), interactionCount);
+
+    // Whole-ledger PDF report (#52): one timed run, it is too slow to repeat.
+    final service = CrmService(
+      parties: parties,
+      interactions: interactions,
+      clock: const SystemClock(),
+    );
+    final pdfWatch = Stopwatch()..start();
+    final report = await HistoryExportService(service).exportLedgerPdf();
+    pdfWatch.stop();
+    // ignore: avoid_print
+    print(
+      '${'ledger PDF report (#52)'.padRight(46)} '
+      '${(pdfWatch.elapsedMilliseconds / 1000).toStringAsFixed(1).padLeft(8)} s'
+      '  (${(report.bytes.length / 1024 / 1024).toStringAsFixed(1)} MB)',
+    );
   });
 }

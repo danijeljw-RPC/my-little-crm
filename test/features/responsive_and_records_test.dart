@@ -5,6 +5,7 @@ import 'package:my_little_crm/core/clock.dart';
 import 'package:my_little_crm/domain/crm_service.dart';
 import 'package:my_little_crm/domain/models.dart';
 import 'package:my_little_crm/domain/repositories.dart';
+import 'package:my_little_crm/features/export/history_export_service.dart';
 import 'package:my_little_crm/features/export/ledger_transfer.dart';
 import 'package:my_little_crm/features/interactions/interaction_editor.dart';
 
@@ -315,6 +316,26 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(find.text('Export everything?'), findsNothing);
+    });
+
+    testWidgets('offers a PDF report that is not encrypted or importable', (
+      tester,
+    ) async {
+      await _pump(tester, await _service(), _phone);
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Readable report · not encrypted or importable'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Export everything (PDF)'));
+      await tester.pumpAndSettle();
+      expect(find.text(HistoryExportService.reportNotice), findsOneWidget);
+      expect(HistoryExportService.reportNotice, contains('NOT encrypted'));
+      expect(HistoryExportService.reportNotice, contains('cannot be imported'));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Export everything as PDF?'), findsNothing);
     });
 
     test('the file holds every party and interaction', () async {
