@@ -1,18 +1,36 @@
 import 'package:flutter/material.dart';
 
+import 'core/clock.dart';
+import 'core/date_format.dart';
 import 'domain/crm_service.dart';
 import 'domain/models.dart';
-import 'domain/repositories.dart';
-import 'core/clock.dart';
+import 'features/export/ledger_transfer.dart';
 import 'features/follow_ups/follow_ups_screen.dart';
-import 'features/parties/party_list_screen.dart';
-import 'features/parties/party_history_screen.dart';
-import 'features/search/search_screen.dart';
 import 'features/interactions/interaction_editor.dart';
+import 'features/interactions/recent_interactions_list.dart';
+import 'features/parties/party_history_screen.dart';
+import 'features/parties/party_list_screen.dart';
+import 'features/search/search_screen.dart';
 
-class MyLittleCrmApp extends StatelessWidget {
-  const MyLittleCrmApp({super.key, this.service});
+/// Material 3 window-size breakpoints (#31).
+const compactMaxWidth = 600.0;
+const expandedMinWidth = 840.0;
+
+class MyLittleCrmApp extends StatefulWidget {
+  const MyLittleCrmApp({super.key, this.service, this.dateLocale});
   final CrmService? service;
+
+  /// Fixes the locale used for dates (tests); null follows the device.
+  final String? dateLocale;
+  @override
+  State<MyLittleCrmApp> createState() => _MyLittleCrmAppState();
+}
+
+class _MyLittleCrmAppState extends State<MyLittleCrmApp> {
+  late final CrmService _fallback = CrmService.inMemory(
+    clock: const SystemClock(),
+  );
+  CrmService get service => widget.service ?? _fallback;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -21,15 +39,12 @@ class MyLittleCrmApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff315dce)),
       useMaterial3: true,
     ),
-    home: InteractionHome(
-      service:
-          service ??
-          CrmService(
-            parties: MemoryPartyRepository(),
-            interactions: MemoryInteractionRepository(),
-            clock: const SystemClock(),
-          ),
+    builder: (context, child) => DateFormatScope(
+      clock: service.clock,
+      locale: widget.dateLocale,
+      child: child!,
     ),
+    home: InteractionHome(service: service),
   );
 }
 
@@ -41,154 +56,220 @@ class InteractionHome extends StatefulWidget {
 }
 
 class _InteractionHomeState extends State<InteractionHome> {
-  final List<_Entry> _entries = [];
+  CrmService get service => widget.service;
   var _selectedIndex = 0;
-  int _revision = 0;
-  String? _loadError;
-  int _loadGeneration = 0;
+  int _overdue = 0;
+
+  /// Two-pane selections (expanded widths only).
+  Party? _interactionParty;
+  InteractionId? _selectedInteraction;
+  Party? _selectedParty;
+
   @override
   void initState() {
     super.initState();
-    _reload();
-  }
-
-  Future<void> _add() async {
-    await editInteraction(context, widget.service);
-    await _reload();
-  }
-
-  Future<void> _reload() async {
-    final generation = ++_loadGeneration;
-    try {
-      final parties = await widget.service.parties.list();
-      final entries = <_Entry>[];
-      for (final party in parties) {
-        for (final interaction in await widget.service.partyHistory(party.id)) {
-          entries.add(_Entry(party: party, interaction: interaction));
-        }
-      }
-      entries.sort(
-        (a, b) => b.interaction.timestamp.compareTo(a.interaction.timestamp),
-      );
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _loadError = null;
-        _revision++;
-        _entries.clear();
-        _entries.addAll(entries);
-      });
-    } catch (_) {
-      if (mounted && generation == _loadGeneration) {
-        setState(
-          () => _loadError = 'Could not load interactions. Please try again.',
-        );
-      }
-    }
+    service.revision.addListener(_refreshOverdue);
+    _refreshOverdue();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('My Little CRM')),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _add,
-      icon: const Icon(Icons.add),
-      label: const Text('Add interaction'),
-    ),
-    body: _selectedIndex == 3
-        ? SearchScreen(service: widget.service, revision: _revision)
-        : _selectedIndex == 2
-        ? PartyListScreen(
-            key: ValueKey(_revision),
-            service: widget.service,
-            onReturn: _reload,
-          )
-        : _selectedIndex == 1
-        ? FollowUpsScreen(key: ValueKey(_revision), service: widget.service)
-        : _loadError != null
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_loadError!),
-                TextButton(onPressed: _reload, child: const Text('Retry')),
-              ],
-            ),
-          )
-        : _entries.isEmpty
-        ? const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.forum_outlined, size: 52),
-                SizedBox(height: 12),
-                Text('Interactions'),
-                SizedBox(height: 6),
-                Text('No interactions yet'),
-                Text('Record a conversation, promise, or follow-up.'),
-              ],
-            ),
-          )
-        : ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: _entries.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 10),
-            itemBuilder: (_, index) {
-              final entry = _entries[index];
-              return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.forum_outlined),
-                  ),
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => PartyHistoryScreen(
-                          service: widget.service,
-                          party: entry.party,
-                        ),
-                      ),
-                    );
-                    await _reload();
-                  },
-                  title: Text(entry.party.name),
-                  subtitle: Text(entry.interaction.summary),
-                  trailing: Text(
-                    entry.interaction.timestamp.toLocal().toString().substring(
-                      0,
-                      16,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) {
-        setState(() => _selectedIndex = index);
-        _reload();
-      },
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.forum_outlined),
-          label: 'Interactions',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.checklist_outlined),
-          label: 'Follow-ups',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.people_outline),
-          label: 'Parties',
-        ),
-        NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
-      ],
+  void dispose() {
+    service.revision.removeListener(_refreshOverdue);
+    super.dispose();
+  }
+
+  Future<void> _refreshOverdue() async {
+    try {
+      final count = await service.overdueFollowUpCount();
+      if (mounted && count != _overdue) setState(() => _overdue = count);
+    } catch (_) {
+      // The badge is a hint; the follow-ups screen reports load failures.
+    }
+  }
+
+  Future<void> _openHistory(Party party) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => PartyHistoryScreen(service: service, party: party),
     ),
   );
-}
 
-class _Entry {
-  const _Entry({required this.party, required this.interaction});
-  final Party party;
-  final Interaction interaction;
+  Widget _twoPane({
+    required Widget list,
+    required Widget? detail,
+    required String placeholder,
+  }) => Row(
+    children: [
+      SizedBox(width: 400, child: list),
+      const VerticalDivider(width: 1),
+      Expanded(
+        child:
+            detail ??
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(placeholder, textAlign: TextAlign.center),
+              ),
+            ),
+      ),
+    ],
+  );
+
+  Widget _content(bool expanded) {
+    switch (_selectedIndex) {
+      case 1:
+        return FollowUpsScreen(service: service);
+      case 2:
+        final list = PartyListScreen(
+          service: service,
+          selectedId: expanded ? _selectedParty?.id : null,
+          onSelect: expanded
+              ? (party) => setState(() => _selectedParty = party)
+              : null,
+        );
+        if (!expanded) return list;
+        return _twoPane(
+          list: list,
+          placeholder: 'Select a party to see its history',
+          detail: _selectedParty == null
+              ? null
+              : PartyHistoryScreen(
+                  key: ValueKey(_selectedParty!.id),
+                  service: service,
+                  party: _selectedParty!,
+                  embedded: true,
+                  onPartyChanged: (next) =>
+                      setState(() => _selectedParty = next),
+                ),
+        );
+      case 3:
+        return SearchScreen(service: service);
+      default:
+        final list = RecentInteractionsList(
+          service: service,
+          selectedId: expanded ? _selectedInteraction : null,
+          onOpen: (entry) {
+            if (expanded) {
+              setState(() {
+                _interactionParty = entry.party;
+                _selectedInteraction = entry.interaction.id;
+              });
+            } else {
+              _openHistory(entry.party);
+            }
+          },
+        );
+        if (!expanded) return list;
+        return _twoPane(
+          list: list,
+          placeholder: 'Select an interaction to see it in its party history',
+          detail: _interactionParty == null
+              ? null
+              : PartyHistoryScreen(
+                  key: ValueKey(_interactionParty!.id),
+                  service: service,
+                  party: _interactionParty!,
+                  embedded: true,
+                  highlight: _selectedInteraction,
+                  onPartyChanged: (next) =>
+                      setState(() => _interactionParty = next),
+                ),
+        );
+    }
+  }
+
+  Widget _followUpIcon(IconData icon) => _overdue == 0
+      ? Icon(icon)
+      : Semantics(
+          label: '$_overdue overdue',
+          child: ExcludeSemantics(
+            child: Badge(label: Text('$_overdue'), child: Icon(icon)),
+          ),
+        );
+
+  List<({Widget icon, String label})> get _destinations => [
+    (icon: const Icon(Icons.forum_outlined), label: 'Interactions'),
+    (icon: _followUpIcon(Icons.checklist_outlined), label: 'Follow-ups'),
+    (icon: const Icon(Icons.people_outline), label: 'Parties'),
+    (icon: const Icon(Icons.search), label: 'Search'),
+  ];
+
+  void _select(int index) => setState(() => _selectedIndex = index);
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < compactMaxWidth;
+    final expanded = width >= expandedMinWidth;
+    final transfer = LedgerTransfer(service);
+    final content = _content(expanded);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Little CRM'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'More options',
+            onSelected: (value) => value == 'export'
+                ? transfer.exportEverything(context)
+                : transfer.importExport(context),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.download_outlined),
+                  title: Text('Export everything (JSON)'),
+                  subtitle: Text('Not encrypted'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.upload_outlined),
+                  title: Text('Import an export'),
+                  subtitle: Text('Into an empty ledger only'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => editInteraction(context, service),
+        icon: const Icon(Icons.add),
+        label: const Text('Add interaction'),
+      ),
+      body: compact
+          ? content
+          : Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _select,
+                  extended: expanded,
+                  labelType: expanded
+                      ? NavigationRailLabelType.none
+                      : NavigationRailLabelType.all,
+                  destinations: [
+                    for (final d in _destinations)
+                      NavigationRailDestination(
+                        icon: d.icon,
+                        label: Text(d.label),
+                      ),
+                  ],
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: content),
+              ],
+            ),
+      bottomNavigationBar: compact
+          ? NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _select,
+              destinations: [
+                for (final d in _destinations)
+                  NavigationDestination(icon: d.icon, label: d.label),
+              ],
+            )
+          : null,
+    );
+  }
 }

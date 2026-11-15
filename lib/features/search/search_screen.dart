@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/date_format.dart';
 import '../../domain/crm_service.dart';
 import '../../domain/models.dart';
 import '../interactions/interaction_editor.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, required this.service, this.revision = 0});
+  const SearchScreen({super.key, required this.service});
   final CrmService service;
-  final int revision;
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
@@ -17,13 +17,21 @@ class _SearchScreenState extends State<SearchScreen> {
   int _generation = 0;
   String _query = '';
   String? _error;
+
   @override
-  void didUpdateWidget(covariant SearchScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.revision != widget.revision) {
-      _search(_query);
-    }
+  void initState() {
+    super.initState();
+    // Re-run the query after any edit, move, delete or undo.
+    widget.service.revision.addListener(_rerun);
   }
+
+  @override
+  void dispose() {
+    widget.service.revision.removeListener(_rerun);
+    super.dispose();
+  }
+
+  void _rerun() => _search(_query);
 
   Future<void> _search(String value) async {
     _query = value;
@@ -69,9 +77,9 @@ class _SearchScreenState extends State<SearchScreen> {
           children: [
             for (final item in _results)
               _Result(
+                key: ValueKey('${item.id}/${item.partyId}'),
                 item: item,
                 service: widget.service,
-                onReturn: () => _search(_query),
               ),
           ],
         ),
@@ -81,12 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 class _Result extends StatelessWidget {
-  const _Result({
-    required this.item,
-    required this.service,
-    required this.onReturn,
-  });
-  final Future<void> Function() onReturn;
+  const _Result({super.key, required this.item, required this.service});
   final Interaction item;
   final CrmService service;
   @override
@@ -98,20 +101,20 @@ class _Result extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(item.summary),
-          Text('${item.timestamp.toLocal()} · ${item.method.name}'),
+          Text(
+            '${AppDateFormat.of(context).dateTime(item.timestamp)} · '
+            '${item.method.name}',
+          ),
         ],
       ),
       onTap: snapshot.data == null
           ? null
-          : () async {
-              await editInteraction(
-                context,
-                service,
-                existing: item,
-                partyName: snapshot.data!.name,
-              );
-              await onReturn();
-            },
+          : () => editInteraction(
+              context,
+              service,
+              existing: item,
+              partyName: snapshot.data!.name,
+            ),
     ),
   );
 }

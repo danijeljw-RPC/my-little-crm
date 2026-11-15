@@ -11,6 +11,7 @@ import 'package:my_little_crm/data/local/app_database.dart';
 import 'package:my_little_crm/data/local/interaction_repository.dart';
 import 'package:my_little_crm/data/local/party_repository.dart';
 import 'package:my_little_crm/domain/crm_service.dart';
+import 'package:my_little_crm/domain/ledger.dart';
 import 'package:my_little_crm/domain/models.dart';
 
 Future<void> pumpUntil(
@@ -150,4 +151,68 @@ void main() {
       await directory.delete(recursive: true);
     },
   );
+
+  testWidgets('v1.1.0 record management keeps native search consistent', (
+    tester,
+  ) async {
+    final directory = await Directory.systemTemp.createTemp('crm-v110-');
+    addTearDown(() => directory.delete(recursive: true));
+    final db = await AppDatabase.open(path: '${directory.path}/v110.sqlite');
+    addTearDown(db.close);
+    final service = CrmService(
+      parties: LocalPartyRepository(db),
+      interactions: LocalInteractionRepository(db),
+      clock: FixedClock(DateTime.utc(2026, 11, 15)),
+    );
+    final typo = await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'BrightSure',
+        summary: 'Premium disputed',
+        referenceNumbers: ['BS-1'],
+      ),
+    );
+    final real = await service.createInteraction(
+      const CreateInteractionCommand(
+        partyName: 'Brightsure Ins.',
+        summary: 'Quote received',
+      ),
+    );
+    final moved = await service.updateInteraction(
+      UpdateInteractionCommand(
+        interaction: real,
+        summary: real.summary,
+        targetPartyName: 'Elsewhere',
+      ),
+    );
+    expect(moved.id, real.id);
+    expect((await service.searchInteractions('Elsewhere')).single.id, real.id);
+
+    await service.mergeParties(source: typo.partyId, target: moved.partyId);
+    expect(
+      (await service.searchInteractions('prem disp')).single.partyId,
+      moved.partyId,
+    );
+    await service.renameParty(moved.partyId, 'Énergie');
+    expect(await service.searchInteractions('éNERGIE'), hasLength(2));
+
+    final snapshot = await service.snapshot();
+    final deleted = await service.deleteInteraction(typo.id);
+    expect(await service.searchInteractions('prem disp'), isEmpty);
+    expect(await service.searchInteractions('BS-1'), isEmpty);
+    await service.restoreInteraction(deleted!);
+    expect(await service.searchInteractions('prem disp'), hasLength(1));
+
+    await service.deleteParty(moved.partyId);
+    expect(await service.searchInteractions('prem disp'), isEmpty);
+    expect(await service.searchInteractions('Quote'), isEmpty);
+    expect(
+      await service.parties.list(),
+      hasLength(1),
+    ); // empty "Brightsure Ins."
+    await service.deleteParty((await service.parties.list()).single.id);
+
+    await service.importLedger(LedgerSnapshot.fromJson(snapshot.toJson()));
+    expect(await service.searchInteractions('prem disp'), hasLength(1));
+    expect(await service.interactions.count(), 2);
+  });
 }

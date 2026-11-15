@@ -121,3 +121,80 @@ iOS remain part of the later platform-acceptance stage; this review does not
 establish those results. PDF exports intentionally reject unsupported glyphs
 with a JSON alternative. App lock, encrypted backup/recovery, notifications,
 calendar integration, and cloud sync remain later-stage work.
+
+## v1.1.0 — 16 November 2026
+
+Milestone v1.1.0 (#31–#39) adds record management (delete, rename, merge, moving
+an interaction), grouped follow-ups with optional due times, a full-ledger JSON
+export and import, locale-aware dates, a responsive layout, a paged home list
+and broader CI. Database schema 4 adds `interactions.follow_up_has_time`
+(existing follow-ups stay day-only) and two indexes. The migration is idempotent
+and is covered by an upgrade test from a genuine schema 3 file.
+
+### Large-ledger benchmark (#39)
+
+`flutter test tool/benchmark/ledger_benchmark_test.dart` seeds an on-disk SQLite
+ledger through FFI with 50,000 interactions across 2,000 parties: half have a
+reference, a third have a contact, and one in 25 has a follow-up. It reports the
+median of 7 runs after one warm-up. The machine was an Apple-silicon Mac on
+macOS, using SQLite FTS5 through `sqflite_common_ffi`. Seeding took about 13.5 s.
+
+| Operation | Schema 4, no new indexes | With new indexes |
+|---|---:|---:|
+| Old home reload: list all parties, then each history (N+1)¹ | 673 ms | 658 ms |
+| New home first page (50, SQL join + `LIMIT`) | 41.4 ms | **0.4 ms** |
+| New home next page (50, keyset cursor) | 13.4 ms | **0.4 ms** |
+| Open follow-ups | 8.6 ms | **6.2 ms** |
+| One party's history | 0.3 ms | 0.3 ms |
+| Search `CASE-24680` (exact reference) | 38.4 ms | 38.3 ms |
+| Search `refund` (FTS word, 12,500 hits) | 134.6 ms | 135.3 ms |
+| Search `Party 1234` (party-name substring) | 38.6 ms | 38.5 ms |
+| Search `Contact 42` (contact substring) | 40.2 ms | 40.2 ms |
+| Search with no match | 37.0 ms | 37.0 ms |
+
+¹ This already uses the batched reference loading added in 1.1.0. Version 1.0.0
+also ran one reference query per row, so the real 1.0.0 home reload was slower
+than this.
+
+Indexes kept:
+
+- `interactions_timestamp_id ON interactions(timestamp DESC, id DESC)` serves
+  the newest-first home pages. It removes the full sort, giving about 100× on the
+  first page.
+- `interactions_follow_up ON interactions(follow_up_status, follow_up_due_at)`
+  serves the outstanding follow-up list (about 28% faster).
+
+Search is unchanged at about 40 ms on 50k records. Its cost is the `LIKE '%…%'`
+substring scans on party, contact and reference columns, which B-tree indexes
+cannot serve. That is acceptable for an interactive search box at this size. If
+ledgers grow well beyond this, the next steps are trigram FTS for metadata and a
+result limit; broad FTS matches such as `refund` spend most of their time
+loading every hit.
+
+### CI coverage (#35)
+
+`Flutter validation` runs on every pull request:
+
+| Job | Runner | Covers |
+|---|---|---|
+| Analyze and unit tests | ubuntu-latest | `flutter analyze`, and all unit and widget tests (in-memory and on-disk SQLite through FFI/FTS5) |
+| macOS integration | macos-15 | Builds the macOS app and runs `integration_test/core_journey_test.dart` against native SQLite, including the FTS4 fallback and the v1.1.0 record-management journey |
+| Linux integration | ubuntu-latest + xvfb | Builds the Linux desktop app and runs the same journey on the FFI/FTS5 path. The FTS4-only case is skipped there by design |
+
+The macOS job had been commented out in the workflow. Its last runs passed in
+about 4 minutes, and the only failure was a run cancelled by a newer push. It is
+re-enabled with a concurrency group, so superseded runs are cancelled, and a
+timeout. Android, iOS and Windows are still not exercised by CI. Their
+acceptance remains with #7.
+
+### Verification on 16 November 2026
+
+- `flutter analyze`: no issues.
+- `flutter test`: all unit and widget tests passed. New tests cover delete with
+  FTS and reference cleanup, cascading party delete, rename including the Unicode
+  conflict, merge, moving an interaction, keyset paging, the schema 3 to 4
+  upgrade, export/import round-trip and rejection, date formatting at fixed
+  locales, follow-up grouping at fixed times, compact and expanded layouts, and
+  lazy home paging.
+- `flutter test integration_test/core_journey_test.dart -d macos`: all 3 native
+  tests passed.

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'dart:io';
@@ -11,7 +12,7 @@ import '../../domain/models.dart';
 class AppDatabase {
   AppDatabase._(this._database);
 
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
   final Database _database;
 
   static Future<AppDatabase> open({String? path, bool useFfi = false}) async {
@@ -35,6 +36,7 @@ class AppDatabase {
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) await _addUnicodeSearchColumns(db);
           if (oldVersion < 3) await _normalizeTimestamps(db);
+          if (oldVersion < 4) await _addFollowUpTimeAndIndexes(db);
         },
       ),
     );
@@ -43,8 +45,10 @@ class AppDatabase {
 
   static Future<AppDatabase> inMemory() async {
     sqfliteFfiInit();
+    // Each call gets its own private in-memory database.
     final database = await databaseFactoryFfi.openDatabase(
       inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
     );
     await _createSchema(database);
     await database.execute('PRAGMA foreign_keys = ON');
@@ -89,6 +93,26 @@ class AppDatabase {
       'CREATE INDEX interaction_references_value ON interaction_references(value)',
     );
     await _addUnicodeSearchColumns(database);
+    await _addFollowUpTimeAndIndexes(database);
+  }
+
+  /// Schema 4: optional follow-up due time (#34) and indexes for the paged
+  /// home list and the follow-up list (#39).
+  static Future<void> _addFollowUpTimeAndIndexes(Database database) async {
+    final columns = await database.rawQuery('PRAGMA table_info(interactions)');
+    if (!columns.any((c) => c['name'] == 'follow_up_has_time')) {
+      await database.execute(
+        'ALTER TABLE interactions ADD COLUMN follow_up_has_time INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    // Chosen from tool/benchmark/ledger_benchmark_test.dart; see
+    // docs/delivery/STAGE-1-REVIEW.md for before/after timings.
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS interactions_timestamp_id ON interactions(timestamp DESC, id DESC)',
+    );
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS interactions_follow_up ON interactions(follow_up_status, follow_up_due_at)',
+    );
   }
 
   static Future<void> _addUnicodeSearchColumns(Database database) async {
@@ -185,6 +209,68 @@ class AppDatabase {
     )).map(_party),
   );
 
+  Future<Party> restoreParty(Party party) async {
+    await _insertParty(party, _database);
+    return party;
+  }
+
+  Future<Party> renameParty(PartyId id, String name) => _database.transaction((
+    transaction,
+  ) async {
+    final current = await transaction.query(
+      'parties',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (current.isEmpty) throw StateError('Party no longer exists');
+    final clash = await transaction.query(
+      'parties',
+      where: 'name_search = ? AND id != ?',
+      whereArgs: [name.toLowerCase(), id],
+      limit: 1,
+    );
+    if (clash.isNotEmpty) throw PartyNameConflict(await _party(clash.single));
+    await transaction.update(
+      'parties',
+      {'name': name, 'name_search': name.toLowerCase()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return Party(id: id, name: name);
+  });
+
+  Future<void> mergeParties({
+    required PartyId source,
+    required PartyId target,
+  }) => _database.transaction((transaction) async {
+    final found = await transaction.query(
+      'parties',
+      columns: ['id'],
+      where: 'id IN (?, ?)',
+      whereArgs: [source, target],
+    );
+    if (found.length != 2) throw StateError('Party no longer exists');
+    await transaction.update(
+      'interactions',
+      {'party_id': target},
+      where: 'party_id = ?',
+      whereArgs: [source],
+    );
+    await transaction.delete('parties', where: 'id = ?', whereArgs: [source]);
+  });
+
+  Future<void> deleteParty(PartyId id) =>
+      _database.transaction((transaction) async {
+        // Delete interactions explicitly (rather than relying only on the
+        // cascade) so the FTS delete trigger runs for each row.
+        await transaction.delete(
+          'interactions',
+          where: 'party_id = ?',
+          whereArgs: [id],
+        );
+        await transaction.delete('parties', where: 'id = ?', whereArgs: [id]);
+      });
+
   Future<Party> _insertParty(Party party, DatabaseExecutor executor) async {
     await executor.insert('parties', {
       'id': party.id,
@@ -195,8 +281,40 @@ class AppDatabase {
     return party;
   }
 
-  Future<Interaction> saveInteraction(Interaction input) async {
-    return _database.transaction((transaction) async {
+  Future<Interaction> saveInteraction(Interaction input) =>
+      _database.transaction((transaction) => _write(transaction, input));
+
+  /// Imports a whole ledger in one transaction. The emptiness check runs
+  /// inside it too, so an interrupted or failed import leaves nothing behind.
+  Future<void> importLedger({
+    required List<Party> parties,
+    required List<Interaction> interactions,
+  }) => _database.transaction((transaction) async {
+    final existing = await transaction.rawQuery(
+      'SELECT (SELECT COUNT(*) FROM parties) + '
+      '(SELECT COUNT(*) FROM interactions) AS n',
+    );
+    if ((existing.single['n']! as int) > 0) {
+      throw StateError(ledgerNotEmptyMessage);
+    }
+    for (final party in parties) {
+      await _insertParty(party, transaction);
+    }
+    for (final item in interactions) {
+      await _write(transaction, item);
+    }
+  });
+
+  /// Saves many interactions in one transaction: all or nothing.
+  Future<void> saveInteractions(List<Interaction> items) =>
+      _database.transaction((transaction) async {
+        for (final item in items) {
+          await _write(transaction, item);
+        }
+      });
+
+  Future<Interaction> _write(Transaction transaction, Interaction input) async {
+    {
       final existing = await transaction.query(
         'interactions',
         columns: ['created_at'],
@@ -225,6 +343,7 @@ class AppDatabase {
             ? null
             : _utc(item.followUp!.dueAt),
         'follow_up_status': item.followUp?.status.name,
+        'follow_up_has_time': item.followUp?.hasTime ?? false ? 1 : 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await transaction.delete(
         'interaction_references',
@@ -239,7 +358,7 @@ class AppDatabase {
         });
       }
       return item;
-    });
+    }
   }
 
   Future<Interaction?> getInteraction(InteractionId id) async {
@@ -260,6 +379,56 @@ class AppDatabase {
           orderBy: 'timestamp DESC',
         ),
       );
+
+  Future<void> deleteInteraction(InteractionId id) =>
+      _database.delete('interactions', where: 'id = ?', whereArgs: [id]);
+
+  Future<int> countInteractions({PartyId? partyId}) async {
+    final rows = await _database.rawQuery(
+      'SELECT COUNT(*) AS n FROM interactions'
+      '${partyId == null ? '' : ' WHERE party_id = ?'}',
+      [?partyId],
+    );
+    return rows.single['n']! as int;
+  }
+
+  Future<List<Interaction>> allInteractions() async => _load(
+    await _database.query('interactions', orderBy: 'timestamp ASC, id ASC'),
+  );
+
+  /// Newest-first page joined with the party name, ordered and limited in
+  /// SQLite (#39). Pages continue strictly after [after].
+  Future<List<InteractionEntry>> recentInteractions({
+    int limit = 50,
+    RecentCursor? after,
+  }) async {
+    final rows = await _database.rawQuery(
+      '''SELECT i.*, p.name AS party_name FROM interactions i
+      JOIN parties p ON p.id = i.party_id
+      ${after == null ? '' : 'WHERE i.timestamp < ? OR (i.timestamp = ? AND i.id < ?)'}
+      ORDER BY i.timestamp DESC, i.id DESC
+      LIMIT ?''',
+      [
+        if (after != null) ...[
+          _utc(after.timestamp),
+          _utc(after.timestamp),
+          after.id,
+        ],
+        limit,
+      ],
+    );
+    final items = await _load(rows);
+    return [
+      for (var index = 0; index < rows.length; index++)
+        InteractionEntry(
+          party: Party(
+            id: items[index].partyId,
+            name: rows[index]['party_name']! as String,
+          ),
+          interaction: items[index],
+        ),
+    ];
+  }
 
   Future<List<Interaction>> openFollowUps() async => _load(
     await _database.query(
@@ -318,18 +487,40 @@ class AppDatabase {
     );
   }
 
-  Future<List<Interaction>> _load(List<Map<String, Object?>> rows) =>
-      Future.wait(rows.map(_interaction));
+  /// Builds interactions from rows, loading all their references in batched
+  /// queries instead of one query per row.
+  Future<List<Interaction>> _load(List<Map<String, Object?>> rows) async {
+    final ids = [for (final row in rows) row['id']! as String];
+    final references = <String, List<String>>{};
+    const chunk = 500;
+    for (var start = 0; start < ids.length; start += chunk) {
+      final slice = ids.sublist(start, (start + chunk).clamp(0, ids.length));
+      for (final row in await _database.query(
+        'interaction_references',
+        columns: ['interaction_id', 'value'],
+        where:
+            'interaction_id IN (${List.filled(slice.length, '?').join(', ')})',
+        whereArgs: slice,
+        orderBy: 'interaction_id, value',
+      )) {
+        (references[row['interaction_id']! as String] ??= []).add(
+          row['value']! as String,
+        );
+      }
+    }
+    return [
+      for (final row in rows)
+        _fromRow(row, references[row['id']! as String] ?? const []),
+    ];
+  }
+
   Future<Party> _party(Map<String, Object?> row) async =>
       Party(id: row['id']! as String, name: row['name']! as String);
-  Future<Interaction> _interaction(Map<String, Object?> row) async {
+  Future<Interaction> _interaction(Map<String, Object?> row) async =>
+      (await _load([row])).single;
+
+  Interaction _fromRow(Map<String, Object?> row, List<String> references) {
     final id = row['id']! as String;
-    final references = await _database.query(
-      'interaction_references',
-      columns: ['value'],
-      where: 'interaction_id = ?',
-      whereArgs: [id],
-    );
     final dueAt = row['follow_up_due_at'] as String?;
     final status = row['follow_up_status'] as String?;
     return Interaction(
@@ -340,15 +531,14 @@ class AppDatabase {
       createdAt: DateTime.parse(row['created_at']! as String).toUtc(),
       method: CommunicationMethod.values.byName(row['method']! as String),
       contactName: row['contact_name'] as String?,
-      referenceNumbers: references
-          .map((reference) => reference['value']! as String)
-          .toList(growable: false),
+      referenceNumbers: List.unmodifiable(references),
       commitment: row['commitment'] as String?,
       followUp: dueAt == null
           ? null
           : FollowUp(
               dueAt: DateTime.parse(dueAt).toUtc(),
               status: FollowUpStatus.values.byName(status!),
+              hasTime: (row['follow_up_has_time'] as int? ?? 0) != 0,
             ),
     );
   }
@@ -362,6 +552,19 @@ class AppDatabase {
         ? '${iso.substring(0, iso.length - 1)}000Z'
         : iso;
   }
+
+  @visibleForTesting
+  Future<int> debugCount(String table) async =>
+      (await _database.rawQuery('SELECT COUNT(*) AS n FROM $table'))
+              .single['n']!
+          as int;
+
+  @visibleForTesting
+  Future<bool> debugIndexExists(String name) async => (await _database.query(
+    'sqlite_master',
+    where: "type = 'index' AND name = ?",
+    whereArgs: [name],
+  )).isNotEmpty;
 
   Future<void> close() => _database.close();
 }

@@ -27,6 +27,15 @@ class _UnavailableInteractions extends MemoryInteractionRepository {
   }
 
   @override
+  Future<List<InteractionEntry>> recent({
+    int limit = 50,
+    RecentCursor? after,
+  }) async {
+    if (fail) throw StateError('Storage unavailable');
+    return super.recent(limit: limit, after: after);
+  }
+
+  @override
   Future<List<Interaction>> openFollowUps() async {
     if (fail) throw StateError('Storage unavailable');
     return super.openFollowUps();
