@@ -2,8 +2,12 @@
 # Build a release-signed Android APK and, optionally, publish it as a GitHub release.
 #
 #   scripts/release.sh                  build + verify into dist/ (nothing is published)
+#   scripts/release.sh --aab            ...also build the Google Play app bundle (.aab)
 #   scripts/release.sh --publish        ...then create GitHub release v<version>
 #   scripts/release.sh --publish --draft  ...as a draft you publish from GitHub
+#
+# The .aab is for uploading to Google Play Console by hand; it is never attached to the
+# GitHub release (phones can't install an .aab).
 #
 # This is the ONLY build that uses the release key: it sets MLC_RELEASE_SIGNING=1, which
 # android/app/build.gradle.kts checks. Everything else (flutter run, scripts/run.sh, plain
@@ -15,11 +19,13 @@ cd "${0:A:h}/.."
 
 publish=false
 draft=false
+aab=false
 for arg in "$@"; do
   case $arg in
     --publish) publish=true ;;
     --draft) draft=true ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --aab) aab=true ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) print -u2 "error: unknown option $arg (try --help)"; exit 2 ;;
   esac
 done
@@ -76,6 +82,27 @@ signer=$(print -r -- "$certs" | sed -n 's/^Signer #1 certificate DN: //p')
 print "Signer: $signer"
 [[ $signer == *"CN=Android Debug"* ]] && die "APK is signed with the DEBUG key; do not distribute it"
 [[ -n $signer ]] || die "could not read the APK signer"
+apk_sha256=$(print -r -- "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+[[ -n $apk_sha256 ]] || die "could not read the APK signer's SHA-256 fingerprint"
+
+if $aab; then
+  command -v keytool >/dev/null 2>&1 || die "keytool not found; install a JDK"
+  step "Building release-signed app bundle (Google Play)"
+  MLC_RELEASE_SIGNING=1 flutter build appbundle --release
+  bundle=build/app/outputs/bundle/release/app-release.aab
+  [[ -f $bundle ]] || die "build finished but $bundle is missing"
+
+  step "Verifying bundle signature"
+  bundle_certs=$(keytool -printcert -jarfile "$bundle") || die "keytool could not read the bundle signature"
+  bundle_signer=$(print -r -- "$bundle_certs" | sed -n 's/^Owner: //p' | head -1)
+  print "Signer: $bundle_signer"
+  [[ $bundle_signer == *"CN=Android Debug"* ]] && die "bundle is signed with the DEBUG key; do not upload it"
+  # keytool prints "SHA256: E1:C8:..."; apksigner prints "e1c8...". Compare normalised.
+  bundle_sha256=$(print -r -- "$bundle_certs" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)
+  bundle_sha256=${(L)${bundle_sha256//:/}}
+  [[ $bundle_sha256 == $apk_sha256 ]] ||
+    die "bundle signer ($bundle_sha256) differs from the APK signer ($apk_sha256)"
+fi
 
 step "Packaging into dist/"
 mkdir -p dist
@@ -90,6 +117,11 @@ else
 fi
 print "dist/$name.apk"
 print "dist/$name.apk.sha256  $(cut -d' ' -f1 "dist/$name.apk.sha256")"
+if $aab; then
+  cp "$bundle" "dist/$name.aab"
+  ( cd dist && shasum -a 256 "$name.aab" > "$name.aab.sha256" )
+  print "dist/$name.aab  (upload to Google Play Console; build $build_number)"
+fi
 
 if ! $publish; then
   print "\nBuilt but not published. To publish: scripts/release.sh --publish"

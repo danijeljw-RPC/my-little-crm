@@ -24,7 +24,7 @@ keytool -genkeypair -v \
   -storetype PKCS12 \
   -keyalg RSA -keysize 4096 -validity 10000 \
   -alias mylittlecrm \
-  -dname "CN=Danijel-James Wynyard-McClay, OU=Mobile, O=RePass Cloud Pty Ltd, L=Sydney, ST=NSW, C=AU" \
+  -dname "CN=RePass Cloud Pty Ltd, OU=Android OS, O=mylittlecrm, L=Sydney, ST=NSW, C=AU" \
   -storepass:env KS_PASS \
   -keypass:env KS_PASS
 
@@ -120,20 +120,53 @@ The script:
    with the APK, checksum and notes.
 
 The release certificate is
-`CN=Danijel-James Wynyard-McClay, OU=Mobile, O=RePass Cloud Pty Ltd, L=Sydney, ST=NSW, C=AU`.
+`CN=RePass Cloud Pty Ltd, OU=Android OS, O=mylittlecrm, L=Sydney, ST=NSW, C=AU`.
+Its SHA-256 fingerprint is
+`E1:C8:1A:B9:B5:60:BF:9B:50:7B:B1:1A:AC:44:BB:27:E5:C0:FD:24:76:B3:8A:B6:1E:2F:C3:69:D4:E4:43:5A`.
 To check an APK by hand:
 
 ```bash
 ~/Library/Android/sdk/build-tools/<version>/apksigner verify --print-certs dist/my-little-crm-<version>.apk
 ```
 
-## 5. Host it
+## 5. Google Play (app bundle)
+
+Google Play only accepts an Android App Bundle (`.aab`), not an APK. Build it
+alongside the APK with:
+
+```bash
+scripts/release.sh --aab                 # APK + AAB into dist/, nothing published
+scripts/release.sh --aab --publish       # same, and publish the APK to GitHub
+```
+
+The script release-signs the bundle and **stops if its signing certificate
+isn't the same as the APK's**, so the bundle can't end up debug-signed. It writes
+`dist/my-little-crm-<version>.aab` and a `.sha256` checksum. The `.aab` is never
+attached to the GitHub release, because phones can't install it. Upload it in
+Play Console by hand.
+
+- **Version code:** Play rejects a bundle whose build number (after `+` in
+  `pubspec.yaml`) it has already received. Bump it for every upload, including
+  test tracks.
+- **Play App Signing (first upload only, can't be changed later):** choose
+  **"Use a different key"** and upload the existing release key (Play Console
+  shows the PEPK export steps). Builds from Play are then signed with the same
+  certificate as the GitHub APKs. Users can move between the two and keep their
+  data. With a Google-generated key, anyone who installed from GitHub has to
+  uninstall first, which deletes their data.
+- **Release name:** Play only shows it inside Play Console and suggests
+  `<build> (<version>)`, e.g. `15 (1.0.0)`. Keep that suggestion.
+- **Release notes:** at most 500 characters per language, in
+  `<en-US>…</en-US>` tags. Write a short, user-facing summary of the
+  `CHANGELOG.md` section.
+
+## 6. Host it
 
 | Option | Effort | Notes |
 |---|---|---|
 | **GitHub Releases** (recommended) | Lowest | `scripts/release.sh --publish` does it. Free, gives a permanent download link, and works with **Obtainium**, an app that auto-updates sideloaded APKs from GitHub Releases. The repo must be public, or the release assets need to be hosted somewhere public. |
 | Cloudflare R2 or Pages | Low–medium | Upload the files from `dist/`. Gives you a custom domain such as `download.example.com/mylittlecrm.apk` and a landing page. Serve the file with `Content-Type: application/vnd.android.package-archive`. |
-| Google Play | Highest | Needs a US$25 one-off developer account and an **AAB** (`flutter build appbundle`) instead of an APK. New personal accounts must run a closed test with 12+ testers for 14 days. Updates and trust are handled for you. |
+| Google Play | Highest | Needs a US$25 one-off developer account and an **AAB** (`scripts/release.sh --aab`, see section 5) instead of an APK. New personal accounts must run a closed test with 12+ testers for 14 days. Updates and trust are handled for you. |
 | F-Droid | Medium | Fits an offline, privacy-focused app, but F-Droid builds from your source under its own rules. |
 
 ## What users do to install
@@ -154,4 +187,5 @@ release, or use Obtainium to track the GitHub Releases page.
 - [ ] Changes committed and pushed
 - [ ] `scripts/release.sh` succeeded (signer is the release certificate)
 - [ ] `scripts/release.sh --publish` created the GitHub release
+- [ ] For Google Play: `scripts/release.sh --aab` built `dist/*.aab`, which is uploaded in Play Console
 - [ ] Installed over the previous release on a real device (data preserved)
