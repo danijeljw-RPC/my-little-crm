@@ -6,6 +6,12 @@
 #   scripts/release.sh --publish        ...then create GitHub release v<version>
 #   scripts/release.sh --publish --draft  ...as a draft you publish from GitHub
 #
+#   scripts/release.sh --trigger        publish the FULL release from CI instead: switch to
+#                                       main, pull, and push an empty "release" commit, which
+#                                       starts .github/workflows/release.yml (Android, macOS
+#                                       and Windows). No local build. Asks before pushing.
+#   scripts/release.sh --trigger --yes  ...without asking
+#
 # The .aab is for uploading to Google Play Console by hand; it is never attached to the
 # GitHub release (phones can't install an .aab).
 #
@@ -20,19 +26,73 @@ cd "${0:A:h}/.."
 publish=false
 draft=false
 aab=false
+trigger=false
+yes=false
 for arg in "$@"; do
   case $arg in
     --publish) publish=true ;;
     --draft) draft=true ;;
     --aab) aab=true ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --trigger) trigger=true ;;
+    --yes|-y) yes=true ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) print -u2 "error: unknown option $arg (try --help)"; exit 2 ;;
   esac
 done
 $draft && ! $publish && { print -u2 "error: --draft only makes sense with --publish"; exit 2; }
+$trigger && { $publish || $draft || $aab; } &&
+  { print -u2 "error: --trigger releases from CI; it can't be combined with --publish, --draft or --aab"; exit 2; }
+$yes && ! $trigger && { print -u2 "error: --yes only makes sense with --trigger"; exit 2; }
 
 die() { print -u2 "error: $*"; exit 1; }
 step() { print "\n== $* =="; }
+
+# --trigger: the same as
+#   git checkout main && git pull && git commit --allow-empty -m release && git push origin main
+# with checks that stop BEFORE anything is pushed.
+if $trigger; then
+  [[ -z $(git status --porcelain --untracked-files=no) ]] ||
+    die "uncommitted changes; commit or stash them first (they would be carried onto main)"
+
+  step "Updating main"
+  git checkout main
+  git pull --ff-only origin main || die "main could not be fast-forwarded to origin/main; sort that out first"
+
+  version_line=$(grep -m1 '^version:' pubspec.yaml) || die "no version: line in pubspec.yaml"
+  full_version=${${version_line#version:}// /}
+  version=${full_version%%+*}
+  [[ ${full_version#*+} != $full_version ]] || die "pubspec.yaml version needs a build number, e.g. $version+1"
+  tag="v$version"
+
+  step "Checking $tag can be released"
+  [[ $(git log -1 --format=%s) != [Rr]elease ]] ||
+    die "main is already on a 'release' commit; check the Release run in GitHub Actions"
+  grep -q "^## \[$version\]" CHANGELOG.md || die "CHANGELOG.md on main has no '## [$version]' section"
+  [[ -z $(git ls-remote --tags origin "refs/tags/$tag") ]] ||
+    die "tag $tag already exists on origin; bump the version in pubspec.yaml"
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    gh release view "$tag" >/dev/null 2>&1 && die "release $tag already exists; bump the version in pubspec.yaml"
+  else
+    print "(gh not available or not logged in; skipped the GitHub release check, the tag check passed)"
+  fi
+  print "OK: My Little CRM $version (pubspec $full_version) at $(git log -1 --format='%h %s')"
+
+  if ! $yes; then
+    [[ -t 0 ]] || die "not a terminal; pass --yes to push without asking"
+    read -r "answer?Push an empty 'release' commit to origin/main and publish $tag? [y/N] "
+    [[ $answer == [yY] || $answer == [yY][eE][sS] ]] || { print "Cancelled; nothing was committed or pushed."; exit 1; }
+  fi
+
+  step "Triggering the release workflow"
+  git commit --allow-empty -m release
+  if ! git push origin main; then
+    git reset -q --soft HEAD~1
+    die "push failed; the local 'release' commit was undone, nothing was published"
+  fi
+  print "\nPushed. GitHub Actions is now building and publishing $tag:"
+  print "  https://github.com/danijeljw-RPC/my-little-crm/actions/workflows/release.yml"
+  exit 0
+fi
 
 command -v flutter >/dev/null 2>&1 || die "flutter is not on PATH"
 [[ -f android/key.properties ]] || die "android/key.properties not found (see docs/ANDROID-RELEASE.md)"
