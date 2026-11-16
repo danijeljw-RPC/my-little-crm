@@ -137,11 +137,29 @@ To check an APK by hand:
 anything when the pushed head commit's message is exactly `release` (any
 case). You can also start it by hand from the **Actions** tab on `main`.
 
+Once the version bump and the `CHANGELOG.md` section are merged to `main`,
+run:
+
 ```bash
-# after bumping pubspec.yaml and adding the CHANGELOG.md section:
-git commit --allow-empty -m release
-git push origin main
+scripts/release.sh --trigger         # asks before pushing
+scripts/release.sh --trigger --yes   # no prompt
 ```
+
+That is the same as
+`git checkout main && git pull && git commit --allow-empty -m release && git push origin main`.
+It doesn't build anything locally. Before pushing, it stops if any of these
+is true:
+
+- the working tree has uncommitted changes;
+- `main` can't fast-forward;
+- the version has no build number;
+- `CHANGELOG.md` has no section for the version;
+- tag or release `v<version>` already exists;
+- `main` is already on a `release` commit.
+
+If the push fails, it removes the local `release` commit. Don't combine it
+with `--publish`: that creates the same `v<version>` release locally, with the
+APK only, and the CI run would then refuse to run.
 
 If you merge through a PR, the head commit is the merge commit, so use
 **Squash and merge** with the title `release`, or push the `release` commit to
