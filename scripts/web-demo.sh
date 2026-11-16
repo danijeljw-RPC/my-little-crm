@@ -6,6 +6,10 @@
 #   scripts/web-demo.sh build          setup + release Wasm build -> build/web
 #   scripts/web-demo.sh serve [port]   serve build/web (default port 8080)
 #   scripts/web-demo.sh [port]         build, then serve
+#   scripts/web-demo.sh package        build + zip -> dist/mylittlecrm-demo-<version>.zip
+#   scripts/web-demo.sh package --base-href /demo/   for hosting in a sub-folder
+#
+# Upload the zip's contents to a static web server: docs/WEB-DEMO.md#publish.
 #
 # The server sends the same headers the hosting must: cross-origin isolation
 # (COOP/COEP) for the multi-threaded Wasm renderer, and application/wasm.
@@ -32,7 +36,8 @@ setup() {
 build() {
   setup
   flutter build web --release --wasm --dart-define=DEMO_MODE=true "$@"
-  rm -f build/web/sqflite_sw.js
+  # Not part of the site: the unused worker, and Flutter's build bookkeeping.
+  rm -f build/web/sqflite_sw.js build/web/.last_build_id
 }
 
 serve() {
@@ -70,10 +75,24 @@ http.server.ThreadingHTTPServer(
 PY
 }
 
+package() {
+  build "$@"
+  local version
+  version=$(awk '/^version:/ {print $2; exit}' pubspec.yaml)
+  local zip=dist/mylittlecrm-demo-${version%%+*}.zip
+  mkdir -p dist
+  rm -f $zip
+  # -X: no extra file attributes.
+  (cd build/web && zip -qrX ../../$zip .)
+  print "\n✓ $zip ($(du -h $zip | awk '{print $1}')), $(unzip -Z1 $zip | wc -l | tr -d ' ') files"
+  print "  Upload its contents to your web root; see docs/WEB-DEMO.md#publish"
+}
+
 case ${1:-} in
   setup) setup ;;
   build) shift; build "$@" ;;
+  package) shift; package "$@" ;;
   serve) shift; serve "${1:-8080}" ;;
   ''|<->) build; serve "${1:-8080}" ;;
-  *) print -u2 "usage: scripts/web-demo.sh [setup | build | serve [port] | port]"; exit 2 ;;
+  *) print -u2 "usage: scripts/web-demo.sh [setup | build | package [--base-href /path/] | serve [port] | port]"; exit 2 ;;
 esac
