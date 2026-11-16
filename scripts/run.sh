@@ -8,8 +8,9 @@
 # Examples: scripts/run.sh macos | scripts/run.sh "iPhone 18 Pro"
 #           scripts/run.sh swoovr-pixel | scripts/run.sh R9WW30CSG1K
 #
-# Web (chrome, edge, web-server) is refused: the app needs native SQLite and
-# shows a blank screen in a browser. Web support is tracked in #30.
+# Web (chrome, edge, web-server) always runs the in-memory demo (#30); the
+# SQLite Wasm binary is fetched first if needed. For the release Wasm build
+# served like production, use scripts/web-demo.sh.
 
 set -euo pipefail
 cd "${0:A:h}/.."
@@ -116,15 +117,12 @@ list_targets() {
   print "   eg: scripts/run.sh macos   scripts/run.sh \"iPhone 18 Pro\"   scripts/run.sh linux"
 }
 
-# Refuse browser targets with an explanation instead of a blank screen (#30).
-reject_web() {
+# Browser targets run the in-memory demo (#30); fetch the SQLite Wasm first.
+prepare_web() {
   case ${1:l} in
     chrome|edge|web|web-server|*browser*)
-      print -u2 "error: \"$1\" is a web target, and My Little CRM does not run in a browser yet."
-      print -u2 "       It stores data in native SQLite, which isn't available on the web,"
-      print -u2 "       so it starts to a blank screen. Web support is tracked in issue #30."
-      print -u2 "       Run a desktop, simulator or device target instead, e.g. scripts/run.sh macos"
-      exit 2;;
+      scripts/web-demo.sh setup
+      print "ℹ Web runs the demo: sample data in memory, discarded on refresh.";;
   esac
 }
 
@@ -134,11 +132,10 @@ if (( $# == 0 )); then
 fi
 
 target=$1; shift
-reject_web "$target"
+prepare_web "$target"
 
 # 1. Already running or connected.
 if device=$(find_running "$target"); then
-  reject_web "$device"
   print "▶ Running on $device"
   exec flutter run -d "$device" "$@"
 fi

@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-import 'dart:io';
-
-import 'package:sqflite/sqflite.dart' as native;
-import 'package:path_provider/path_provider.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../domain/models.dart';
+import 'database_opener_io.dart'
+    if (dart.library.js_interop) 'database_opener_web.dart'
+    as platform;
 
 /// Versioned SQLite store with Dart-normalized Unicode search values.
 class AppDatabase {
@@ -15,16 +13,13 @@ class AppDatabase {
   static const schemaVersion = 4;
   final Database _database;
 
+  /// Opens the persistent database (native platforms only; the web build is
+  /// in-memory only and throws [UnsupportedError]).
   static Future<AppDatabase> open({String? path, bool useFfi = false}) async {
-    final factory =
-        !useFfi && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
-        ? native.databaseFactory
-        : databaseFactoryFfi;
-    if (useFfi || Platform.isWindows || Platform.isLinux) sqfliteFfiInit();
-    final location = path ?? await defaultPath();
-    await Directory(File(location).parent.path).create(recursive: true);
-    final database = await factory.openDatabase(
-      location,
+    final database = await platform.openFileDatabase(
+      path,
+      fileName: fileName,
+      useFfi: useFfi,
       options: OpenDatabaseOptions(
         version: schemaVersion,
         onConfigure: (db) async {
@@ -42,35 +37,15 @@ class AppDatabase {
     return AppDatabase._(database);
   }
 
-  /// The live database's file name. Changing it (or [defaultPath]) would
-  /// leave existing users' data behind, so both are pinned by tests (#54).
+  /// The live database's file name. Changing it (or its directory, see
+  /// `defaultDatabasePath` in database_opener_io.dart) would leave existing
+  /// users' data behind, so both are pinned by tests (#54).
   static const fileName = 'crm.sqlite';
 
-  /// Where the live database lives: the app's private, persistent Application
-  /// Support directory, resolved by path_provider at run time (#54):
-  ///
-  /// - macOS (sandboxed): `~/Library/Containers/<bundle id>/Data/Library/`
-  ///   `Application Support/<bundle id>/`
-  /// - iOS: `<app container>/Library/Application Support/`
-  /// - Android: `/data/data/<applicationId>/files/`
-  /// - Windows: `%APPDATA%\<CompanyName>\<ProductName>\`
-  /// - Linux: `$XDG_DATA_HOME` (`~/.local/share`)`/<APPLICATION_ID>/`
-  ///
-  /// Never inside the app bundle, so it survives updates and reinstalls of
-  /// new release builds. User-chosen locations are only for exports.
-  @visibleForTesting
-  static Future<String> defaultPath({
-    Future<Directory> Function() supportDirectory =
-        getApplicationSupportDirectory,
-  }) async => '${(await supportDirectory()).path}/$fileName';
-
+  /// A private, throwaway database that is never written to disk or browser
+  /// storage: tests, and the demo (#30).
   static Future<AppDatabase> inMemory() async {
-    sqfliteFfiInit();
-    // Each call gets its own private in-memory database.
-    final database = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(singleInstance: false),
-    );
+    final database = await platform.openMemoryDatabase();
     await _createSchema(database);
     await database.execute('PRAGMA foreign_keys = ON');
     await database.execute('PRAGMA recursive_triggers = ON');

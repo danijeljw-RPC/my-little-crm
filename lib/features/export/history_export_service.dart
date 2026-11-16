@@ -1,7 +1,6 @@
 import 'dart:convert';
-import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdf/pdf.dart' show PdfTooBigPageException;
@@ -192,19 +191,25 @@ class HistoryExportService {
     );
   }
 
-  // Static so the isolate closure captures only these arguments.
+  // Off the UI thread on native (a background isolate); inline on the web,
+  // which has no isolates (#30). Static so only these arguments are sent.
   static Future<Uint8List> _renderOffThread(
     ByteData font,
     List<PdfPartySection> sections,
     String generatedAt,
-  ) => Isolate.run(
-    () => renderPdf(
-      font: font,
-      sections: sections,
-      generatedAt: generatedAt,
-      contents: true,
-    ),
-    debugName: 'ledger-pdf',
+  ) => compute(_renderLedgerJob, (
+    font: font,
+    sections: sections,
+    generatedAt: generatedAt,
+  ), debugLabel: 'ledger-pdf');
+
+  static Future<Uint8List> _renderLedgerJob(
+    ({ByteData font, List<PdfPartySection> sections, String generatedAt}) job,
+  ) async => renderPdf(
+    font: job.font,
+    sections: job.sections,
+    generatedAt: job.generatedAt,
+    contents: true,
   );
 
   /// One section per party, ordered by name; each history oldest first.

@@ -16,3 +16,7 @@ notes.txt
 
 # Widget Preview related
 .widget_preview/
+
+# Browser demo binaries: scripts/web-demo.sh setup fetches them (#30)
+/web/sqlite3.wasm
+/web/sqflite_sw.js

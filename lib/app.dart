@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/clock.dart';
 import 'core/date_format.dart';
+import 'demo/demo_banner.dart';
 import 'domain/crm_service.dart';
 import 'domain/models.dart';
 import 'features/export/ledger_transfer.dart';
@@ -17,8 +18,16 @@ const compactMaxWidth = 600.0;
 const expandedMinWidth = 840.0;
 
 class MyLittleCrmApp extends StatefulWidget {
-  const MyLittleCrmApp({super.key, this.service, this.dateLocale});
+  const MyLittleCrmApp({
+    super.key,
+    this.service,
+    this.dateLocale,
+    this.demo = false,
+  });
   final CrmService? service;
+
+  /// Shows the demo banner: the data is sample data and is thrown away (#30).
+  final bool demo;
 
   /// Fixes the locale used for dates (tests); null follows the device.
   final String? dateLocale;
@@ -42,7 +51,7 @@ class _MyLittleCrmAppState extends State<MyLittleCrmApp> {
     builder: (context, child) => DateFormatScope(
       clock: service.clock,
       locale: widget.dateLocale,
-      child: child!,
+      child: widget.demo ? DemoBanner(child: child!) : child!,
     ),
     home: InteractionHome(service: service),
   );

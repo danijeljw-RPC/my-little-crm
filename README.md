@@ -32,7 +32,8 @@ Install Flutter stable with its matching Dart SDK, then run `flutter doctor` and
 install the toolchains it identifies for the host platform. Use `flutter devices`
 to choose a device ID. Windows builds require Windows and Visual Studio C++ tools;
 Linux builds require Linux and the desktop GTK toolchain; Apple builds require
-macOS and Xcode; Android builds require the Android SDK. Web is not a release target.
+macOS and Xcode; Android builds require the Android SDK. The web build is a
+disposable demo with sample data, not a release target: see [browser demo](docs/WEB-DEMO.md).
 
 To pick a target without looking up IDs, use the run helper. With no argument it
 lists running devices, launchable emulators and (on macOS) shut-down iOS simulators;
@@ -43,6 +44,8 @@ Matching is case-insensitive, and extra arguments are passed to `flutter run`.
 scripts/run.sh                    # macOS / Linux (zsh)
 scripts/run.sh "iPhone 18 Pro"
 scripts/run.sh macos --release
+scripts/run.sh chrome             # the in-memory browser demo
+scripts/web-demo.sh               # release Wasm demo at http://localhost:8080
 ```
 
 ```powershell
@@ -115,6 +118,7 @@ protection to require both of its checks before merging:
 - `Flutter validation / Analyze and unit tests`
 - `Flutter validation / macOS integration`
 - `Flutter validation / Linux integration`
+- `Flutter validation / Web demo (Wasm)` (uploads the demo site as an artifact)
 
 The large-ledger benchmark is not part of CI; run it with
 `flutter test tool/benchmark/ledger_benchmark_test.dart`.

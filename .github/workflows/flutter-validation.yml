@@ -66,3 +66,43 @@ jobs:
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - run: xvfb-run -a flutter test integration_test/core_journey_test.dart -d linux
+
+  # The browser demo (#30): Flutter WebAssembly, DEMO_MODE, in-memory SQLite.
+  # Produces the static site as an artifact; deployment is not automated here.
+  web-demo:
+    name: Web demo (Wasm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - run: sudo apt-get update && sudo apt-get install -y zsh
+      - run: flutter pub get
+      # Fetches sqlite3.wasm at the version pinned by pubspec.lock, then runs
+      # `flutter build web --release --wasm --dart-define=DEMO_MODE=true`.
+      # No secrets: DEMO_MODE is the only define, and this job reads none.
+      - run: scripts/web-demo.sh build
+      - name: Check the static site
+        working-directory: build/web
+        run: |
+          for f in index.html main.dart.wasm main.dart.mjs main.dart.js sqlite3.wasm _headers; do
+            test -s "$f" || { echo "::error::missing $f"; exit 1; }
+          done
+          grep -q 'Cross-Origin-Embedder-Policy' _headers
+          test ! -e sqflite_sw.js
+          # Only the web build's own file types belong on a public site.
+          unexpected=$(find . -type f \
+            ! -regex '.*\.\(html\|js\|mjs\|wasm\|json\|png\|otf\|ttf\|frag\|bin\|symbols\)$' \
+            ! -name _headers ! -name NOTICES ! -name .last_build_id)
+          if [ -n "$unexpected" ]; then echo "::error::unexpected files: $unexpected"; exit 1; fi
+          du -sh .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-demo
+          path: build/web
+          if-no-files-found: error
+          retention-days: 14
