@@ -97,12 +97,15 @@ jobs:
           # Only the web build's own file types belong on a public site.
           unexpected=$(find . -type f \
             ! -regex '.*\.\(html\|js\|mjs\|wasm\|json\|png\|otf\|ttf\|frag\|bin\|symbols\)$' \
-            ! -name _headers ! -name .htaccess ! -name NOTICES ! -name .last_build_id)
+            ! -name _headers ! -name .htaccess ! -name NOTICES)
           if [ -n "$unexpected" ]; then echo "::error::unexpected files: $unexpected"; exit 1; fi
           du -sh .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-demo
           path: build/web
+          # The site needs .htaccess (Apache/cPanel config); hidden files are
+          # skipped by default.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

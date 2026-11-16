@@ -36,7 +36,8 @@ setup() {
 build() {
   setup
   flutter build web --release --wasm --dart-define=DEMO_MODE=true "$@"
-  rm -f build/web/sqflite_sw.js
+  # Not part of the site: the unused worker, and Flutter's build bookkeeping.
+  rm -f build/web/sqflite_sw.js build/web/.last_build_id
 }
 
 serve() {
@@ -81,8 +82,8 @@ package() {
   local zip=dist/mylittlecrm-demo-${version%%+*}.zip
   mkdir -p dist
   rm -f $zip
-  # -X: no extra file attributes; .last_build_id is Flutter build bookkeeping.
-  (cd build/web && zip -qrX ../../$zip . -x .last_build_id)
+  # -X: no extra file attributes.
+  (cd build/web && zip -qrX ../../$zip .)
   print "\n✓ $zip ($(du -h $zip | awk '{print $1}')), $(unzip -Z1 $zip | wc -l | tr -d ' ') files"
   print "  Upload its contents to your web root; see docs/WEB-DEMO.md#publish"
 }
