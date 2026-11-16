@@ -1,0 +1,12 @@
+# Static-host headers for the browser demo (#30), in the Cloudflare Pages /
+# Netlify `_headers` format. Other hosts need the same headers; see
+# docs/WEB-DEMO.md.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/*.wasm
+  Content-Type: application/wasm

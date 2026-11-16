@@ -40,6 +40,8 @@ dependencies:
   pdf: ^3.13.1
   file_picker: ^13.3.3
   intl: ^0.20.3
+  sqflite_common_ffi_web: ^1.2.2
+  sqflite_common: ^2.5.17
 
 dev_dependencies:
   flutter_test:

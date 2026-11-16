@@ -4,6 +4,35 @@ All notable changes to My Little CRM are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Browser demo** (#30): My Little CRM now runs in a browser, compiled to
+  WebAssembly (`flutter build web --release --wasm --dart-define=DEMO_MODE=true`).
+  The demo uses an in-memory SQLite database seeded with sample parties,
+  interactions and follow-ups. Everything works as normal, and a banner says
+  that changes are discarded on refresh. Nothing is stored in the browser,
+  and no backend or account is needed. See `docs/WEB-DEMO.md`.
+- `DEMO_MODE` build flag: the same throwaway, seeded demo on any platform. It
+  never opens the real ledger.
+- `scripts/web-demo.sh` builds the demo and serves it locally with the
+  hosting headers it needs. A new `Web demo (Wasm)` CI job builds it and
+  uploads the static site as an artifact.
+
+### Fixed
+
+- Running in Chrome no longer shows a blank screen (#30).
+  `scripts/run.sh chrome` and `scripts/run.ps1 chrome` now start the demo
+  instead of refusing web targets.
+
+### Changed
+
+- Opening the database now goes through separate native and web openers,
+  so the web build never loads `dart:io`, `dart:ffi` or the native sqflite
+  plugin. The PDF report uses `compute`, which falls back to the page's
+  thread in browsers.
+
 ## [1.1.1] - 2026-11-16
 
 A printable report of the whole ledger, plus maintenance.

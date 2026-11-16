@@ -166,8 +166,8 @@ example `1.0.0+15`, or override it per build with
 ## Where the database lives
 
 The live ledger is one SQLite file, `crm.sqlite`, in the app's private
-Application Support directory. `AppDatabase.defaultPath()` in
-`lib/data/local/app_database.dart` resolves it at run time with
+Application Support directory. `defaultDatabasePath()` in
+`lib/data/local/database_opener_io.dart` resolves it at run time with
 `path_provider`'s `getApplicationSupportDirectory()`; nothing is hardcoded and
 nothing is stored inside the app bundle, so the file survives app updates and
 new release builds (reviewed in #54).

@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_little_crm/data/local/app_database.dart';
+import 'package:my_little_crm/data/local/database_opener_io.dart';
 import 'package:my_little_crm/data/local/party_repository.dart';
 
 Map<String, String> _plist(String path) {
@@ -20,7 +21,8 @@ Map<String, String> _plist(String path) {
 void main() {
   group('database location', () {
     test('is crm.sqlite in the Application Support directory', () async {
-      final path = await AppDatabase.defaultPath(
+      final path = await defaultDatabasePath(
+        AppDatabase.fileName,
         supportDirectory: () async => Directory('/support'),
       );
       // Renaming the file or folder would orphan every existing ledger.
@@ -33,7 +35,8 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       // A support directory that does not exist yet, as on first launch.
       final support = Directory('${directory.path}/Application Support/app');
-      final path = await AppDatabase.defaultPath(
+      final path = await defaultDatabasePath(
+        AppDatabase.fileName,
         supportDirectory: () async => support,
       );
 
@@ -50,8 +53,10 @@ void main() {
     });
 
     test('is never resolved from the app bundle or working directory', () {
-      final source = File('lib/data/local/app_database.dart')
-          .readAsStringSync();
+      final source = [
+        'lib/data/local/app_database.dart',
+        'lib/data/local/database_opener_io.dart',
+      ].map((path) => File(path).readAsStringSync()).join('\n');
       expect(source, contains('getApplicationSupportDirectory'));
       for (final forbidden in [
         'Platform.resolvedExecutable',

@@ -8,7 +8,7 @@
   .\scripts\run.ps1 "swoovr-pixel"        # launches the Android emulator first
   .\scripts\run.ps1 windows --release     # extra args go straight to `flutter run`
 
-  Web targets (chrome, edge, web-server) are refused until web support lands (#30).
+  Web targets (chrome, edge, web-server) run the in-memory demo (#30).
 #>
 # Deliberately a simple (non-advanced) script: no [Parameter()] attributes, so PowerShell
 # doesn't claim --debug / --verbose as its own common parameters and they reach flutter.
@@ -107,19 +107,30 @@ function Show-Targets {
   Write-Host '   eg: .\scripts\run.ps1 windows   .\scripts\run.ps1 "swoovr-pixel"'
 }
 
-# Refuse browser targets with an explanation instead of a blank screen (#30).
-function Assert-NotWeb([string] $t) {
+# Browser targets run the in-memory demo (#30); fetch the SQLite Wasm first.
+$WebPrepared = $false
+function Initialize-Web([string] $t) {
+  if ($script:WebPrepared) { return }
   if ($t -match '^(chrome|edge|web|web-server)$' -or $t -match 'browser') {
-    [Console]::Error.WriteLine("error: `"$t`" is a web target, and My Little CRM does not run in a browser yet.")
-    [Console]::Error.WriteLine('       It stores data in native SQLite, which isn''t available on the web,')
-    [Console]::Error.WriteLine('       so it starts to a blank screen. Web support is tracked in issue #30.')
-    [Console]::Error.WriteLine('       Run a desktop, emulator or device target instead, e.g. .\scripts\run.ps1 windows')
-    exit 2
+    # sqlite3.wasm must match the Dart sqlite3 package in pubspec.lock.
+    $lock = Get-Content 'pubspec.lock' -Raw
+    $version = [regex]::Match($lock, '(?m)^  sqlite3:\s*\n(?:    .*\n)*?    version: "([^"]+)"').Groups[1].Value
+    if (-not $version) { Write-Error 'sqlite3 not found in pubspec.lock'; exit 1 }
+    $stamp = '.dart_tool/sqlite3-wasm-version'
+    $current = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { '' }
+    if (-not (Test-Path 'web/sqlite3.wasm') -or $current -ne $version) {
+      & dart run sqflite_common_ffi_web:setup --force --sqlite3-wasm-url "https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-$version/sqlite3.wasm"
+      if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      Set-Content -NoNewline $stamp $version
+    }
+    Remove-Item -ErrorAction SilentlyContinue 'web/sqflite_sw.js'
+    Write-Host 'Web runs the demo: sample data in memory, discarded on refresh.'
+    $script:WebPrepared = $true
   }
 }
 
 function Invoke-FlutterRun([string] $id) {
-  Assert-NotWeb $id
+  Initialize-Web $id
   Write-Host "-> Running on $id"
   & flutter run -d $id @FlutterArgs
   exit $LASTEXITCODE
@@ -130,7 +141,7 @@ if (-not $Target) {
   exit 0
 }
 
-Assert-NotWeb $Target
+Initialize-Web $Target
 
 # 1. Already running or connected.
 $device = Find-Running $Target
