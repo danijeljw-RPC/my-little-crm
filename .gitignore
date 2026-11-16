@@ -20,3 +20,6 @@ notes.txt
 # Browser demo binaries: scripts/web-demo.sh setup fetches them (#30)
 /web/sqlite3.wasm
 /web/sqflite_sw.js
+
+# Wrangler (Cloudflare) local state: account cache, `wrangler pages dev` temp files
+.wrangler/

@@ -2,7 +2,8 @@ name: Release
 
 # Push a commit to main whose whole message is "release" (e.g. `git commit --allow-empty -m release`)
 # and this builds Android, macOS and Windows from that commit, then publishes GitHub release
-# v<version> with the version from pubspec.yaml and the notes from that CHANGELOG.md section.
+# v<version> with the version from pubspec.yaml and the notes from that CHANGELOG.md section,
+# then publishes the browser demo to Cloudflare Pages (web-demo-deploy.yml).
 # It can also be started by hand from the Actions tab (main only). See docs/ANDROID-RELEASE.md.
 
 on:
@@ -221,3 +222,11 @@ jobs:
             --title "My Little CRM $VERSION" \
             --notes-file ../artifacts/notes/notes.md \
             --target "$GITHUB_SHA"
+
+  web-demo:
+    name: Publish web demo
+    needs: release
+    uses: ./.github/workflows/web-demo-deploy.yml
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -72,6 +72,7 @@ scripts/web-demo.sh 9000       # same, on another port
 scripts/web-demo.sh build      # build only (output in build/web)
 scripts/web-demo.sh serve      # serve an existing build
 scripts/web-demo.sh package    # build + zip for uploading: see Publish below
+scripts/web-demo.sh deploy     # build + check + publish to Cloudflare Pages + verify
 ```
 
 For development with hot reload, `scripts/run.sh chrome` (or
@@ -259,6 +260,39 @@ curl -sI https://mylittlecrm-demo.example.com/main.dart.wasm | grep -iE 'content
 Safari and older browsers without WebAssembly GC load `main.dart.js`
 instead. That fallback is automatic.
 
+### Cloudflare Pages
+
+The hosted demo (`my-little-crm` Pages project, production branch `main`,
+<https://my-little-crm-demo.repasscloud.com>) is published with Wrangler.
+Don't upload a bare `flutter build web` output: it has no `sqlite3.wasm`, so
+Pages serves `index.html` in its place and the page stays blank with
+`CompileError: ... expected magic word 00 61 73 6d, found 3c 21 44 4f` (#61).
+Use the script, which builds, checks and verifies in one go:
+
+```sh
+npx wrangler login            # once, or set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+scripts/web-demo.sh deploy
+```
+
+It runs `scripts/web-demo.sh build`, then `scripts/ci/check-web-demo.sh`
+(fails unless `sqlite3.wasm` and `main.dart.wasm` start with `00 61 73 6d`,
+and `_headers`/`.htaccess` are present), then
+`wrangler pages deploy build/web --project-name=my-little-crm --branch=main`,
+then `scripts/ci/verify-web-deploy.sh` against the new deployment URL and the
+production URL (each `.wasm` must be WebAssembly bytes served as
+`application/wasm`, and `/` must send COOP/COEP). `CF_PAGES_PROJECT`,
+`CF_PAGES_BRANCH` and `CF_PAGES_SITE` override the project, branch and
+production URL; a branch other than `main` gives a preview deployment.
+
+**In CI**, the `Release` workflow runs `web-demo-deploy.yml` after it
+publishes the GitHub release, and you can run it by hand from the Actions tab
+(main only). It needs two repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | API token with **Account → Cloudflare Pages → Edit** on this account |
+| `CLOUDFLARE_ACCOUNT_ID` | The account ID (dashboard → Workers & Pages, right-hand sidebar) |
+
 ### Updating
 
 Build again and upload again, replacing the files. Visitors get the new
@@ -271,4 +305,5 @@ The `Flutter validation / Web demo (Wasm)` job builds the release Wasm demo
 on every pull request. It checks the static site (required files, both
 hosting configs, no stray files), then uploads it as the `web-demo`
 artifact. The job uses no secrets, and `DEMO_MODE` is the only
-`--dart-define`. Deployment is not automated: publish with the steps above.
+`--dart-define`. Publishing to Cloudflare Pages is `web-demo-deploy.yml`,
+run by `Release`: see [Cloudflare Pages](#cloudflare-pages).

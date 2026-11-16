@@ -32,6 +32,12 @@ Try My Little CRM in a browser: a disposable WebAssembly demo.
 - Running in Chrome no longer shows a blank screen (#30).
   `scripts/run.sh chrome` and `scripts/run.ps1 chrome` now start the demo
   instead of refusing web targets.
+- The Cloudflare Pages demo no longer starts blank with "expected magic word
+  00 61 73 6d" (#61). A bare `flutter build web` leaves out `sqlite3.wasm`, and
+  Pages served `index.html` in its place. `scripts/web-demo.sh deploy` now
+  builds with the demo script, refuses to upload unless `sqlite3.wasm` is real
+  WebAssembly, publishes with Wrangler and checks the live site. The Release
+  workflow runs it after publishing the GitHub release (`web-demo-deploy.yml`).
 
 ### Changed
 
