@@ -1,0 +1,68 @@
+
+name: Auto Close Milestones
+
+on:
+  issues:
+    types: [closed, reopened, milestoned, demilestoned]
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  close-milestones:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Close completed milestones
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Retrieve all open milestones.
+          milestones=$(gh api \
+            "repos/$GH_REPO/milestones?state=open&per_page=100" \
+            --paginate \
+            --jq '.[] | [.number, .title] | @tsv')
+
+          if [[ -z "$milestones" ]]; then
+            echo "No open milestones found."
+            exit 0
+          fi
+
+          # Check each milestone for unresolved issues.
+          while IFS=$'\t' read -r number title; do
+            echo "Checking milestone #$number: $title"
+
+            open_count=$(gh api \
+              "repos/$GH_REPO/milestones/$number" \
+              --jq '.open_issues')
+
+            closed_count=$(gh api \
+              "repos/$GH_REPO/milestones/$number" \
+              --jq '.closed_issues')
+
+            total=$((open_count + closed_count))
+
+            # Never close empty milestones.
+            if (( total == 0 )); then
+              echo "Skipping empty milestone."
+              continue
+            fi
+
+            if (( open_count == 0 )); then
+              echo "Closing milestone #$number"
+
+              gh api \
+                --method PATCH \
+                "repos/$GH_REPO/milestones/$number" \
+                -f state=closed
+            else
+              echo "$open_count issue(s) still open."
+            fi
+          done <<< "$milestones"
