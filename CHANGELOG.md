@@ -4,7 +4,9 @@ All notable changes to My Little CRM are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.2] - 2026-11-16
+
+Try My Little CRM in a browser: a disposable WebAssembly demo.
 
 ### Added
 
@@ -19,6 +21,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - `scripts/web-demo.sh` builds the demo and serves it locally with the
   hosting headers it needs. A new `Web demo (Wasm)` CI job builds it and
   uploads the static site as an artifact.
+- `scripts/web-demo.sh package` zips the demo for uploading to your own web
+  server (`--base-href /path/` for a sub-folder). The site includes an
+  `.htaccess` for Apache/cPanel and a `_headers` file for Cloudflare Pages
+  and Netlify. `docs/WEB-DEMO.md#publish` covers uploading, nginx, Caddy,
+  IIS and CDN headers, and how to check the result.
 
 ### Fixed
 
@@ -153,6 +160,7 @@ then, your device's own security protects the local database.
 3. Open the file and tap **Install**. Play Protect may warn about an unknown
    developer; this is expected for apps installed outside Google Play.
 
+[1.1.2]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.1.2
 [1.1.1]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.1.0
 [1.0.0]: https://github.com/danijeljw-RPC/my-little-crm/releases/tag/v1.0.0

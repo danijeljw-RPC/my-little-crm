@@ -33,7 +33,8 @@ install the toolchains it identifies for the host platform. Use `flutter devices
 to choose a device ID. Windows builds require Windows and Visual Studio C++ tools;
 Linux builds require Linux and the desktop GTK toolchain; Apple builds require
 macOS and Xcode; Android builds require the Android SDK. The web build is a
-disposable demo with sample data, not a release target: see [browser demo](docs/WEB-DEMO.md).
+disposable demo with sample data, not a release target: see [browser demo](docs/WEB-DEMO.md),
+including [how to publish it](docs/WEB-DEMO.md#publish).
 
 To pick a target without looking up IDs, use the run helper. With no argument it
 lists running devices, launchable emulators and (on macOS) shut-down iOS simulators;
@@ -46,6 +47,7 @@ scripts/run.sh "iPhone 18 Pro"
 scripts/run.sh macos --release
 scripts/run.sh chrome             # the in-memory browser demo
 scripts/web-demo.sh               # release Wasm demo at http://localhost:8080
+scripts/web-demo.sh package       # zip the demo to upload to a web server
 ```
 
 ```powershell

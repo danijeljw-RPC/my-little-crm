@@ -10,3 +10,15 @@
 
 /*.wasm
   Content-Type: application/wasm
+
+# Entry files are always revalidated, so a new upload shows up at once.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/flutter_bootstrap.js
+  Cache-Control: no-cache
+/flutter_service_worker.js
+  Cache-Control: no-cache
+/version.json
+  Cache-Control: no-cache
