@@ -8,6 +8,7 @@
 #   scripts/web-demo.sh [port]         build, then serve
 #   scripts/web-demo.sh package        build + zip -> dist/mylittlecrm-demo-<version>.zip
 #   scripts/web-demo.sh package --base-href /demo/   for hosting in a sub-folder
+#   scripts/web-demo.sh deploy         build + check + publish to Cloudflare Pages + verify
 #
 # Upload the zip's contents to a static web server: docs/WEB-DEMO.md#publish.
 #
@@ -88,11 +89,36 @@ package() {
   print "  Upload its contents to your web root; see docs/WEB-DEMO.md#publish"
 }
 
+# Publish build/web to Cloudflare Pages (#61). Wrangler uses CLOUDFLARE_API_TOKEN
+# and CLOUDFLARE_ACCOUNT_ID when set (CI), otherwise your `wrangler login`.
+# CF_PAGES_PROJECT / CF_PAGES_BRANCH override the project and branch; the
+# project's production branch is main, so the default updates the live site.
+# CF_PAGES_SITE is the production URL checked after the upload.
+deploy() {
+  local project=${CF_PAGES_PROJECT:-my-little-crm} branch=${CF_PAGES_BRANCH:-main}
+  local wrangler=(npx --yes wrangler@${WRANGLER_VERSION:-4.131.1})
+  build "$@"
+  scripts/ci/check-web-demo.sh build/web
+  local log=$(mktemp)
+  $wrangler pages deploy build/web --project-name=$project --branch=$branch \
+    --commit-hash=$(git rev-parse HEAD) --commit-dirty=true | tee $log
+  local url
+  url=$(grep -oE "https://[a-z0-9-]+\.$project\.pages\.dev" $log | tail -1 || true)
+  rm -f $log
+  [[ -n $url ]] || { print -u2 "error: no deployment URL in the wrangler output"; exit 1; }
+  local sites=($url)
+  [[ $branch == main ]] && sites+=(${CF_PAGES_SITE:-https://$project.pages.dev})
+  scripts/ci/verify-web-deploy.sh $sites
+  [[ -n ${GITHUB_OUTPUT:-} ]] && print -r -- "url=$url" >> $GITHUB_OUTPUT
+  print "\n✓ deployed $url"
+}
+
 case ${1:-} in
   setup) setup ;;
   build) shift; build "$@" ;;
   package) shift; package "$@" ;;
+  deploy) shift; deploy "$@" ;;
   serve) shift; serve "${1:-8080}" ;;
   ''|<->) build; serve "${1:-8080}" ;;
-  *) print -u2 "usage: scripts/web-demo.sh [setup | build | package [--base-href /path/] | serve [port] | port]"; exit 2 ;;
+  *) print -u2 "usage: scripts/web-demo.sh [setup | build | package [--base-href /path/] | deploy | serve [port] | port]"; exit 2 ;;
 esac
